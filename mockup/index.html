@@ -8,8 +8,8 @@
 <script src="../assets/outils.js"></script>
 <script type="importmap">
 { "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
 } }
 </script>
 <style>
@@ -121,6 +121,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // ============ Petits outils ============
 const $ = s => document.querySelector(s);
@@ -134,53 +136,103 @@ const IC = {
   shirt:'<path d="M8 3 3 6l2 4 2-1v12h10V9l2 1 2-4-5-3a4 4 0 0 1-8 0z"/>',
 };
 document.querySelectorAll('[data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${IC[el.dataset.ic]}</svg>`));
+const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const lerp = (a, b, t) => a + (b - a) * t;
+const TAU = Math.PI * 2;
 
-// ============ Le t-shirt : un volume simple construit en code (pas de fichier 3D externe) ============
-// Unités : 1 = 50 cm (largeur de poitrine d'un t-shirt M).
-const CM = 1 / 50, DEPTH = 0.6;   // DEPTH : le torse est aplati d'avant en arrière
+// ============ La scène : rendu « studio photo » ============
 const viewer = $('#viewer');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NeutralToneMapping;   // garde les vraies couleurs du textile
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 viewer.prepend(renderer.domElement);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 50);
-scene.add(camera, new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.6));
-const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(1.5, 2, 3); camera.add(sun);   // la lumière suit la caméra
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), .04).texture;
+scene.environmentIntensity = .6;
+const camera = new THREE.PerspectiveCamera(30, 1, .1, 50);
+const key = new THREE.DirectionalLight(0xffffff, 1.7); key.position.set(2.4, 2.6, 2.2); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); Object.assign(key.shadow.camera, { left: -1.2, right: 1.2, top: 1.2, bottom: -1.2, near: .5, far: 8 });
+key.shadow.bias = -.0004; key.shadow.normalBias = .012; key.shadow.radius = 3;
+const backLight = new THREE.DirectionalLight(0xffffff, 1.1); backLight.position.set(-2, 1.5, -2.5);
+scene.add(camera, key, backLight);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true; controls.enablePan = false; controls.minDistance = 1.2; controls.maxDistance = 7;
+controls.enableDamping = true; controls.enablePan = false; controls.minDistance = 1.1; controls.maxDistance = 7;
 
-const cloth = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .92, side: THREE.DoubleSide });
-const parts = [];
-const add = geo => { geo.computeVertexNormals(); const m = new THREE.Mesh(geo, cloth); scene.add(m); parts.push(m); return m; };
-
-// Torse : un profil (rayon, hauteur) qu'on fait tourner, puis qu'on aplatit. Le haut finit en col droit.
-const body = new THREE.SplineCurve([[.47,-.8],[.49,-.4],[.5,.1],[.5,.34],[.45,.47],[.34,.55],[.24,.6],[.2,.62]].map(p => new THREE.Vector2(...p))).getPoints(60);
-body.push(new THREE.Vector2(.2, .7));
-const torso = add(new THREE.LatheGeometry(body, 72).scale(1, 1, DEPTH));
-// Bord-côte du col
-add(new THREE.TorusGeometry(.2, .018, 10, 72).rotateX(Math.PI / 2).scale(1, 1, DEPTH).translate(0, .7, 0));
-// Manches : des cônes ouverts, inclinés de 55° vers le bas
-const SLEEVE = {};
-for (const s of [1, -1]){
-  const a = s * 55 * Math.PI / 180, dir = new THREE.Vector3(s * Math.sin(55*Math.PI/180), -Math.cos(55*Math.PI/180), 0);
-  const c = new THREE.Vector3(s * .4, .43, 0).addScaledVector(dir, .2);
-  SLEEVE[s] = { mesh: add(new THREE.CylinderGeometry(.19, .21, .42, 48, 4, true).scale(1, 1, .75).rotateZ(a).translate(c.x, c.y, c.z)), c };
+// ============ Textures du tissu, dessinées en code ============
+// Carte de relief → carte de normales (le petit relief que la lumière accroche). H(x, y) = hauteur 0..1, motif raccordable.
+function normalTex(w, h, H, k, rx, ry){
+  const c = Object.assign(document.createElement('canvas'), { width: w, height: h }), g = c.getContext('2d'), im = g.createImageData(w, h);
+  const hs = new Float32Array(w * h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) hs[y*w + x] = H(x, y);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+    const dx = hs[y*w + (x+1)%w] - hs[y*w + (x-1+w)%w], dy = hs[((y+1)%h)*w + x] - hs[((y-1+h)%h)*w + x];
+    const n = V(-dx * k, dy * k, 1).normalize(), i = (y*w + x) * 4;
+    im.data[i] = (n.x*.5 + .5) * 255; im.data[i+1] = (n.y*.5 + .5) * 255; im.data[i+2] = (n.z*.5 + .5) * 255; im.data[i+3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = 8; return t;
 }
+const rnd = (s => () => (s = s * 16807 % 2147483647) / 2147483647)(42);
+const grain = Array.from({ length: 64 * 64 }, rnd);
+// Jersey : colonnes de petites mailles en V, un carreau = 1,5 cm
+const KNIT = normalTex(64, 64, (x, y) => { const lx = (x % 8) / 8 - .5, ly = (y % 8) / 8, d = Math.abs(Math.abs(lx) - .22 - (ly - .5) * .25); return Math.exp(-d*d / .012) + .3 * grain[y*64 + x]; }, 1.4, 1, 1);
+const knit = (rx, ry) => { const t = KNIT.clone(); t.repeat.set(rx, ry); t.needsUpdate = true; return t; };
+// Côtes du col : 2 côtes par carreau
+const RIB = normalTex(32, 4, x => .5 + .5 * Math.cos(x / 32 * TAU * 2), 2.5, 75, 1);
+
+// ============ Le t-shirt : modèle 3D fait dans Blender (mockup/blender/tshirt.py) ============
+// Forme mesurée sur la photo de référence, puis simulation de tissu (coton) posée sur un mannequin invisible.
+// Unités : 1 = largeur de poitrine (≈ 55 cm, t-shirt oversize taille M). Le fichier est en mètres.
+const CM = 1 / 55, TOP = .625, GLB_SCALE = 1 / .55;
+// Axe des manches (mêmes mesures que dans le script Blender) : sert à viser les emplacements « manche »
+const SL = { rc: [.44, .225], rn: [1, .08], cc: [.70, -.005], cn: [.86, -.5] };
+const sleeveAt = (v, sgn) => V(sgn * lerp(SL.rc[0], SL.cc[0], v), lerp(SL.rc[1], SL.cc[1], v), 0);
+
+// ============ Matières ============
+const mats = [];
+function clothMat(o){
+  const m = new THREE.MeshPhysicalMaterial({ color: '#efe9dc', roughness: .9, sheen: .35, sheenRoughness: .8, sheenColor: 0xffffff, side: THREE.DoubleSide, vertexColors: true, normalScale: new THREE.Vector2(.14, .14), ...o });
+  mats.push(m); return m;
+}
+const parts = [];
+let shirt = null, collar = null;
+
+// Ombre douce au sol
+{
+  const c = Object.assign(document.createElement('canvas'), { width: 128, height: 128 }), g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(0,0,0,.4)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  const blob = new THREE.Mesh(new THREE.PlaneGeometry(1.7, .8).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
+  blob.position.y = -.95; scene.add(blob);
+}
+
+new GLTFLoader().load('tshirt.glb', g => {
+  g.scene.scale.setScalar(GLB_SCALE);
+  g.scene.traverse(o => {
+    if (!o.isMesh) return;
+    const isCol = o.name.startsWith('Col');
+    o.material = isCol ? clothMat({ normalMap: RIB, normalScale: new THREE.Vector2(.6, .6) }) : clothMat({ normalMap: knit(110, 110), normalScale: new THREE.Vector2(.06, .06) });
+    o.castShadow = o.receiveShadow = true; parts.push(o);
+    if (isCol) collar = o; else shirt = o;
+  });
+  scene.add(g.scene); g.scene.updateMatrixWorld(true);
+  SLOTS.mancheG.mesh = SLOTS.mancheD.mesh = shirt; SLOTS.col.mesh = collar;
+  $('#busy').classList.add('hide'); place();
+}, undefined, () => { $('#busy').classList.add('hide'); toast('Impossible de charger le t-shirt 3D. Recharge la page.'); });
 
 // ============ Les emplacements ============
 // from : d'où l'on « vise » le tissu ; at : le point visé. Le design est projeté à l'endroit touché.
-const front = new THREE.Vector3(0, 0, 1), back = new THREE.Vector3(0, 0, -1);
+const front = V(0, 0, 1), back = V(0, 0, -1);
 const SLOTS = {
-  coeur:     { name: 'Cœur',          at: new THREE.Vector3( .2, .28, 0), from: front, cm: 9 },
-  anticoeur: { name: 'Anti-cœur',     at: new THREE.Vector3(-.2, .28, 0), from: front, cm: 9 },
-  dos:       { name: 'Milieu du dos', at: new THREE.Vector3(0, .1, 0),    from: back,  cm: 28 },
-  mancheG:   { name: 'Manche gauche', at: SLEEVE[1].c,  from: new THREE.Vector3( .8, .45, .4).normalize(), cm: 7, mesh: SLEEVE[1].mesh },
-  mancheD:   { name: 'Manche droite', at: SLEEVE[-1].c, from: new THREE.Vector3(-.8, .45, .4).normalize(), cm: 7, mesh: SLEEVE[-1].mesh },
-  col:       { name: 'Étiquette du col', at: new THREE.Vector3(0, .655, 0), from: front, cm: 5, inside: true },
+  coeur:     { name: 'Cœur',          at: V( .2, .3, 0), from: front, cm: 9 },
+  anticoeur: { name: 'Anti-cœur',     at: V(-.2, .3, 0), from: front, cm: 9 },
+  dos:       { name: 'Milieu du dos', at: V(0, .15, 0),  from: back,  cm: 28 },
+  mancheG:   { name: 'Manche gauche', at: sleeveAt(.4, 1),  from: V( .85, .4, .35).normalize(), cm: 7 },
+  mancheD:   { name: 'Manche droite', at: sleeveAt(.4, -1), from: V(-.85, .4, .35).normalize(), cm: 7 },
+  col:       { name: 'Étiquette du col', at: V(0, TOP + .03, 0), from: front, cm: 4, inside: true },
 };
 // La vue conseillée pour chaque emplacement (position de la caméra)
-const VIEW = { coeur:[.7,.5,3.9], anticoeur:[-.7,.5,3.9], dos:[0,.4,-4], mancheG:[2.4,.7,2.9], mancheD:[-2.4,.7,2.9], col:[0,1.75,.75] };
+const VIEW = { coeur:[.7,.45,4.2], anticoeur:[-.7,.45,4.2], dos:[0,.4,-4.3], mancheG:[2.6,.7,3.1], mancheD:[-2.6,.7,3.1], col:[0,1.6,1.05] };
 const S = { slot: 'coeur', tex: null, aspect: 1, decal: null, goal: null };
 
 $('#slots').innerHTML = Object.entries(SLOTS).map(([k, v]) => `<button class="btn" type="button" data-k="${k}" aria-pressed="${k === S.slot}">${v.name}</button>`).join('');
@@ -196,7 +248,7 @@ const ray = new THREE.Raycaster(), helper = new THREE.Object3D();
 function place(){
   if (S.decal){ scene.remove(S.decal); S.decal.geometry.dispose(); S.decal = null; }
   outputs();
-  if (!S.tex) return;
+  if (!S.tex || !shirt) return;
   const sl = SLOTS[S.slot], at = sl.at.clone();
   at.y += +$('#dy').value * CM;
   // Étiquette : on vise de l'intérieur du col vers le dos. Sinon : de l'extérieur vers le point.
@@ -209,8 +261,9 @@ function place(){
   helper.rotateZ(-$('#rot').value * Math.PI / 180);
   const w = +$('#size').value * CM;
   const geo = new DecalGeometry(hit.object, hit.point, helper.rotation, new THREE.Vector3(w, w / S.aspect, sl.inside ? .1 : .22));
-  S.decal = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: S.tex, transparent: true, roughness: .95, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, side: THREE.DoubleSide }));
-  scene.add(S.decal);
+  // l'encre prend le grain de la maille (même carreau de 1,5 cm que le tissu)
+  S.decal = new THREE.Mesh(geo, new THREE.MeshPhysicalMaterial({ map: S.tex, transparent: true, roughness: .8, sheen: .2, normalMap: knit(w / (1.5*CM), w / S.aspect / (1.5*CM)), normalScale: new THREE.Vector2(.5, .5), depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, side: THREE.DoubleSide }));
+  S.decal.receiveShadow = true; scene.add(S.decal);
 }
 function outputs(){
   $('output[for=size]').textContent = (+$('#size').value).toLocaleString('fr-FR') + ' cm';
@@ -244,7 +297,6 @@ renderer.setAnimationLoop(() => {
   }
   controls.update(); renderer.render(scene, camera);
 });
-$('#busy').classList.add('hide');
 
 // ============ Import du design ============
 $('#drop').onclick = $('#change').onclick = () => $('#file').click();
@@ -273,10 +325,10 @@ async function loadFile(f){
 }
 
 // ============ Couleur du t-shirt ============
-const COLS = [['#ffffff','Blanc'],['#111111','Noir'],['#9a9a9a','Gris chiné'],['#1f2a44','Marine'],['#b3261e','Rouge'],['#d9c9a8','Sable'],['#3e5a3a','Kaki']];
+const COLS = [['#efe9dc','Écru'],['#ffffff','Blanc'],['#111111','Noir'],['#9a9a9a','Gris chiné'],['#1f2a44','Marine'],['#b3261e','Rouge'],['#d9c9a8','Sable'],['#3e5a3a','Kaki']];
 $('#cols').innerHTML = COLS.map(([c, n], i) => `<button class="tx" type="button" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${!i}"></button>`).join('')
-  + '<label class="tx custom" title="Autre couleur"><input type="color" id="colPick" value="#ffffff" aria-label="Autre couleur"></label>';
-const setCol = (c, el) => { cloth.color.set(c); document.querySelectorAll('#cols .tx').forEach(x => x.setAttribute('aria-pressed', x === el)); };
+  + '<label class="tx custom" title="Autre couleur"><input type="color" id="colPick" value="#efe9dc" aria-label="Autre couleur"></label>';
+const setCol = (c, el) => { mats.forEach(m => m.color.set(c)); document.querySelectorAll('#cols .tx').forEach(x => x.setAttribute('aria-pressed', x === el)); };
 $('#cols').onclick = e => { const b = e.target.closest('button'); b && setCol(b.dataset.c, b); };
 $('#colPick').oninput = e => setCol(e.target.value, e.target.parentNode);
 
