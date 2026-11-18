@@ -262,6 +262,8 @@ img { display: block; max-width: 100%; }
   transition: transform 1s var(--ease), opacity 1s var(--ease);
 }
 .intro-video video { width: 100%; height: 100%; object-fit: cover; }
+/* Téléphone : la vidéo verticale est montrée en entier (bandes noires si l'écran est plus allongé) */
+@media (orientation: portrait) { .intro-video video { object-fit: contain; } }
 /* Voile noir + flou : commence à 3 s (classe .dim) et est complet vers 5 s */
 .intro-video::after {
   content: ""; position: absolute; inset: 0;

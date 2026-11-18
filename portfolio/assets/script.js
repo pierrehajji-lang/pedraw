@@ -22,6 +22,11 @@ const startPage = () => document.querySelectorAll('.rise, .drop').forEach((el) =
 const intro = document.getElementById('intro-video');
 if (intro) {
   document.documentElement.classList.add('intro-lock');
+  // Écran en hauteur (téléphone) : vidéo verticale ; sinon vidéo horizontale.
+  const v = intro.querySelector('video');
+  const tall = matchMedia('(orientation: portrait)').matches;
+  v.poster = tall ? 'assets/img/intro-poster-mobile.jpg' : 'assets/img/intro-poster.jpg';
+  v.src = tall ? 'assets/intro-mobile.mp4' : 'assets/intro.mp4';
   const dimTimer = setTimeout(() => intro.classList.add('dim'), 3000);
   const leave = () => {
     if (intro.classList.contains('out')) return;
