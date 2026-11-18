@@ -22,6 +22,7 @@
 .shirt-cols .tx{width:30px;height:30px}
 .duo{display:flex;gap:8px;margin-top:12px}
 .duo .btn{flex:1;font-size:13px}
+.hint a{color:inherit}
 /* Téléphone : le t-shirt reste en haut de l'écran pendant qu'on règle en dessous */
 @media (max-width:900px){
   .work{order:-1;position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 16px}
@@ -88,6 +89,7 @@
       <button class="btn" id="reset" data-ic="rotate">Recentrer la vue</button>
     </div>
     <div class="run-wrap"><button class="btn primary big" id="export" data-ic="download">Exporter l'image (PNG)</button></div>
+    <p class="hint">Modèle 3D : <a href="https://sketchfab.com/3d-models/t-shirt-0c2da077451f46c789ebd023cebd6c4e" target="_blank" rel="noopener">« T Shirt »</a> par <a href="https://sketchfab.com/garrysithr" target="_blank" rel="noopener">Garry Smiths</a>, licence <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> (allégé et recoloré).</p>
   </section>
 </aside>
 
@@ -109,7 +111,7 @@
       <div><b data-ic="pin">Cœur / anti-cœur</b>Le <em>cœur</em> est la poitrine gauche de la personne qui porte le t-shirt. L'<em>anti-cœur</em> est l'autre côté.</div>
       <div><b data-ic="pin">Étiquette du col</b>Le petit marquage imprimé à l'intérieur, derrière la nuque, à la place d'une étiquette cousue.</div>
       <div><b data-ic="image">PNG transparent</b>Une image dont le fond est vide : seul le dessin se pose sur le tissu. Un JPG garde son fond blanc.</div>
-      <div><b data-ic="rotate">3D</b>Le t-shirt est un volume calculé dans ton navigateur : on le fait tourner pour le voir sous tous les angles.</div>
+      <div><b data-ic="rotate">3D</b>Un vrai t-shirt modélisé pièce par pièce, avec ses coutures (modèle de Garry Smiths, licence CC BY). On le fait tourner pour le voir sous tous les angles.</div>
       <div><b data-ic="download">Export PNG</b>Enregistre la vue actuelle, fond transparent, prête à poster ou à envoyer au client.</div>
     </div>
   </div>
@@ -123,6 +125,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
 // ============ Petits outils ============
 const $ = s => document.querySelector(s);
@@ -137,7 +140,6 @@ const IC = {
 };
 document.querySelectorAll('[data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${IC[el.dataset.ic]}</svg>`));
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
-const lerp = (a, b, t) => a + (b - a) * t;
 const TAU = Math.PI * 2;
 
 // ============ La scène : rendu « studio photo » ============
@@ -179,15 +181,13 @@ const grain = Array.from({ length: 64 * 64 }, rnd);
 const KNIT = normalTex(64, 64, (x, y) => { const lx = (x % 8) / 8 - .5, ly = (y % 8) / 8, d = Math.abs(Math.abs(lx) - .22 - (ly - .5) * .25); return Math.exp(-d*d / .012) + .3 * grain[y*64 + x]; }, 1.4, 1, 1);
 const knit = (rx, ry) => { const t = KNIT.clone(); t.repeat.set(rx, ry); t.needsUpdate = true; return t; };
 // Côtes du col : 2 côtes par carreau
-const RIB = normalTex(32, 4, x => .5 + .5 * Math.cos(x / 32 * TAU * 2), 2.5, 75, 1);
+const RIB = normalTex(32, 4, x => .5 + .5 * Math.cos(x / 32 * TAU * 2), 2.5, 1, 1);
+const rib = (rx, ry) => { const t = RIB.clone(); t.repeat.set(rx, ry); t.needsUpdate = true; return t; };
 
-// ============ Le t-shirt : modèle 3D fait dans Blender (mockup/blender/tshirt.py) ============
-// Forme mesurée sur la photo de référence, puis simulation de tissu (coton) posée sur un mannequin invisible.
-// Unités : 1 = largeur de poitrine (≈ 55 cm, t-shirt oversize taille M). Le fichier est en mètres.
-const CM = 1 / 55, TOP = .625, GLB_SCALE = 1 / .55;
-// Axe des manches (mêmes mesures que dans le script Blender) : sert à viser les emplacements « manche »
-const SL = { rc: [.44, .225], rn: [1, .08], cc: [.70, -.005], cn: [.86, -.5] };
-const sleeveAt = (v, sgn) => V(sgn * lerp(SL.rc[0], SL.cc[0], v), lerp(SL.rc[1], SL.cc[1], v), 0);
+// ============ Le t-shirt : « T Shirt » par Garry Smiths (Sketchfab, licence CC BY 4.0) ============
+// Modèle fait dans CLO3D (vraies pièces de patron et fils de couture), allégé dans Blender : mockup/blender/prepare_tshirt.py
+// Le fichier est en mètres, ourlet à -0,44 m. Unités de l'outil : 1 = 55 cm.
+const CM = 1 / 55, TOP = .49, GLB_SCALE = 1 / .55;
 
 // ============ Matières ============
 const mats = [];
@@ -196,7 +196,7 @@ function clothMat(o){
   mats.push(m); return m;
 }
 const parts = [];
-let shirt = null, collar = null;
+let shirt = null;
 
 // Ombre douce au sol
 {
@@ -206,17 +206,22 @@ let shirt = null, collar = null;
   blob.position.y = -.95; scene.add(blob);
 }
 
-new GLTFLoader().load('tshirt.glb', g => {
+const draco = new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/libs/draco/gltf/');
+new GLTFLoader().setDRACOLoader(draco).load('tshirt.glb', g => {
   g.scene.scale.setScalar(GLB_SCALE);
   g.scene.traverse(o => {
     if (!o.isMesh) return;
-    const isCol = o.name.startsWith('Col');
-    o.material = isCol ? clothMat({ normalMap: RIB, normalScale: new THREE.Vector2(.6, .6) }) : clothMat({ normalMap: knit(110, 110), normalScale: new THREE.Vector2(.06, .06) });
-    o.castShadow = o.receiveShadow = true; parts.push(o);
-    if (isCol) collar = o; else shirt = o;
+    // UV du patron : 1 unité ≈ 10 cm → maille de 1,5 cm, côtes de 4 mm
+    const kind = o.name.startsWith('Col') ? 'col' : o.name.startsWith('Coutures') ? 'fil' : 'tissu';
+    o.material = kind === 'col' ? clothMat({ normalMap: rib(12, 12), normalScale: new THREE.Vector2(.5, .5) })
+      : kind === 'fil' ? clothMat({ roughness: .8, sheen: .1, vertexColors: false })
+      : clothMat({ normalMap: knit(7, 7), normalScale: new THREE.Vector2(.12, .12) });
+    o.castShadow = o.receiveShadow = true;
+    if (kind !== 'fil') parts.push(o);
+    if (kind === 'tissu') shirt = o;
   });
   scene.add(g.scene); g.scene.updateMatrixWorld(true);
-  SLOTS.mancheG.mesh = SLOTS.mancheD.mesh = shirt; SLOTS.col.mesh = collar;
+  SLOTS.mancheG.mesh = SLOTS.mancheD.mesh = SLOTS.col.mesh = shirt;
   $('#busy').classList.add('hide'); place();
 }, undefined, () => { $('#busy').classList.add('hide'); toast('Impossible de charger le t-shirt 3D. Recharge la page.'); });
 
@@ -224,15 +229,15 @@ new GLTFLoader().load('tshirt.glb', g => {
 // from : d'où l'on « vise » le tissu ; at : le point visé. Le design est projeté à l'endroit touché.
 const front = V(0, 0, 1), back = V(0, 0, -1);
 const SLOTS = {
-  coeur:     { name: 'Cœur',          at: V( .2, .3, 0), from: front, cm: 9 },
-  anticoeur: { name: 'Anti-cœur',     at: V(-.2, .3, 0), from: front, cm: 9 },
-  dos:       { name: 'Milieu du dos', at: V(0, .15, 0),  from: back,  cm: 28 },
-  mancheG:   { name: 'Manche gauche', at: sleeveAt(.4, 1),  from: V( .85, .4, .35).normalize(), cm: 7 },
-  mancheD:   { name: 'Manche droite', at: sleeveAt(.4, -1), from: V(-.85, .4, .35).normalize(), cm: 7 },
-  col:       { name: 'Étiquette du col', at: V(0, TOP + .03, 0), from: front, cm: 4, inside: true },
+  coeur:     { name: 'Cœur',          at: V( .18, .21, 0), from: front, cm: 9 },
+  anticoeur: { name: 'Anti-cœur',     at: V(-.18, .21, 0), from: front, cm: 9 },
+  dos:       { name: 'Milieu du dos', at: V(0, .05, 0),  from: back,  cm: 28 },
+  mancheG:   { name: 'Manche gauche', at: V( .45, .25, 0), from: V( 1, .25, .15).normalize(), cm: 7, depth: .14 },
+  mancheD:   { name: 'Manche droite', at: V(-.45, .25, 0), from: V(-1, .25, .15).normalize(), cm: 7, depth: .14 },
+  col:       { name: 'Étiquette du col', at: V(0, TOP - .05, 0), from: front, cm: 4, inside: true, depth: .06 },   // sous le col, à l'intérieur du dos
 };
 // La vue conseillée pour chaque emplacement (position de la caméra)
-const VIEW = { coeur:[.7,.45,4.2], anticoeur:[-.7,.45,4.2], dos:[0,.4,-4.3], mancheG:[2.6,.7,3.1], mancheD:[-2.6,.7,3.1], col:[0,1.6,1.05] };
+const VIEW = { coeur:[.6,.4,3.6], anticoeur:[-.6,.4,3.6], dos:[0,.35,-3.7], mancheG:[2.3,.6,2.6], mancheD:[-2.3,.6,2.6], col:[0,1.45,.9] };
 const S = { slot: 'coeur', tex: null, aspect: 1, decal: null, goal: null };
 
 $('#slots').innerHTML = Object.entries(SLOTS).map(([k, v]) => `<button class="btn" type="button" data-k="${k}" aria-pressed="${k === S.slot}">${v.name}</button>`).join('');
@@ -257,10 +262,18 @@ function place(){
   ray.set(origin, dir);
   const hit = ray.intersectObjects(sl.mesh ? [sl.mesh] : parts)[0];
   if (!hit) return toast('Emplacement introuvable, essaie une autre hauteur.');
-  helper.position.copy(hit.point); helper.lookAt(hit.point.clone().sub(dir));   // le design regarde vers nous
+  // orientation = normale moyenne du tissu autour du point (5 rayons écartés de 2 cm) : le visuel épouse la surface sans suivre chaque pli
+  const targets = sl.mesh ? [sl.mesh] : parts, side = V(0, 1, 0).cross(dir).normalize(), up = dir.clone().cross(side).normalize(), n = V();
+  for (const [a, b] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]){
+    ray.set(origin.clone().addScaledVector(side, a * 2 * CM).addScaledVector(up, b * 2 * CM), dir);
+    const h = ray.intersectObjects(targets)[0]; if (!h) continue;
+    const fn = h.face.normal.clone().transformDirection(h.object.matrixWorld); n.add(fn.dot(dir) > 0 ? fn.negate() : fn);
+  }
+  if (n.lengthSq() < 1e-6) n.copy(dir).negate();
+  helper.position.copy(hit.point); helper.lookAt(hit.point.clone().add(n.normalize()));   // le design regarde vers l'extérieur du tissu
   helper.rotateZ(-$('#rot').value * Math.PI / 180);
   const w = +$('#size').value * CM;
-  const geo = new DecalGeometry(hit.object, hit.point, helper.rotation, new THREE.Vector3(w, w / S.aspect, sl.inside ? .1 : .22));
+  const geo = new DecalGeometry(hit.object, hit.point, helper.rotation, new THREE.Vector3(w, w / S.aspect, sl.depth ?? .22));
   // l'encre prend le grain de la maille (même carreau de 1,5 cm que le tissu)
   S.decal = new THREE.Mesh(geo, new THREE.MeshPhysicalMaterial({ map: S.tex, transparent: true, roughness: .8, sheen: .2, normalMap: knit(w / (1.5*CM), w / S.aspect / (1.5*CM)), normalScale: new THREE.Vector2(.5, .5), depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, side: THREE.DoubleSide }));
   S.decal.receiveShadow = true; scene.add(S.decal);
@@ -276,7 +289,7 @@ function outputs(){
 function look(k, now){
   S.goal = new THREE.Vector3(...VIEW[k]);
   if (now){ camera.position.copy(S.goal); S.goal = null; }
-  controls.target.set(0, k === 'col' ? .55 : -.05, 0);
+  controls.target.set(0, k === 'col' ? .42 : -.12, 0);
 }
 controls.addEventListener('start', () => S.goal = null);   // on lâche l'animation dès qu'on touche le t-shirt
 $('#reset').onclick = () => look(S.slot);
