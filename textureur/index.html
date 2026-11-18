@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Textureur · PDW</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link rel="stylesheet" href="../assets/outils.css">
+<script src="../assets/outils.js"></script>
+<style>
+.search{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:2px;background:var(--bg);padding:0 10px;color:var(--muted)}
+.search input{border:0;background:none;flex:1;padding:9px 0;font:inherit;outline:none;color:var(--ink);min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.chips button{border:1px solid var(--line);background:var(--panel);border-radius:2px;padding:3px 10px;font:inherit;font-size:12.5px;cursor:pointer;color:var(--ink)}
+.chips button[aria-pressed=true]{background:var(--ink);color:var(--on);border-color:var(--ink)}
+.lib{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;max-height:330px;overflow:auto;padding:2px}
+.tcard{border:1.5px solid var(--line);border-radius:2px;background:var(--panel);padding:3px 3px 5px;cursor:pointer;font:inherit;font-size:11px;line-height:1.15;color:var(--ink);text-align:center;display:flex;flex-direction:column;gap:4px}
+.tcard canvas,.tcard img{width:100%;aspect-ratio:1;border-radius:2px;background:#eceae3;display:block;object-fit:cover}
+.tcard{position:relative}
+.tcard .ph{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.8);color:#fff;font-size:9.5px;font-weight:700;border-radius:2px;padding:1px 4px}
+.tcard:hover{border-color:var(--ink)}
+.tcard[aria-pressed=true]{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.lib .none{grid-column:1/-1;border:1.5px dashed var(--mid);border-radius:2px;padding:16px;text-align:center;color:var(--muted);font-size:13px}
+.layers{display:flex;flex-direction:column;gap:6px;margin-bottom:4px}
+.ly{display:grid;grid-template-columns:40px minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:5px;border:1.5px solid var(--line);border-radius:2px;background:var(--panel);cursor:pointer}
+.ly.on{border-color:var(--ink);background:var(--soft)}
+.ly canvas{width:40px;height:40px;border-radius:2px}
+.ly.off canvas{opacity:.3}
+.ly b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
+.ly small{color:var(--muted);font-size:12px}
+.sel{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:2px;background:var(--bg);font:inherit;color:var(--ink)}
+.duo{display:flex;gap:8px;margin-top:12px}
+.duo .btn{flex:1;font-size:13px}
+#stage canvas{background:conic-gradient(#e9e8e1 25%,#fff 0 50%,#e9e8e1 0 75%,#fff 0) 0 0/16px 16px}
+.credits{font-size:12.5px;color:var(--muted);margin-top:18px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a href="../index.html" class="home" title="Retour à la boîte à outils"><svg class="ic" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg><span class="logo" data-logo="contour"></span></a>
+  <div class="sep"></div>
+  <div>
+    <h1>Le <em>textureur</em></h1>
+    <p>Ajoute grain, papier, toile ou effet usé à tes visuels</p>
+  </div>
+  <button class="btn" id="helpBtn" data-ic="info"><span>Comment ça marche ?</span></button>
+</header>
+
+<div class="app">
+<aside class="panel">
+
+  <section class="step" id="step1">
+    <div class="step-h"><span class="num">1</span><h2>Ton visuel</h2></div>
+    <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choisir une image">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>
+      <strong>Dépose ton visuel ici</strong>
+      <span>ou clique pour le choisir · PNG, JPG, WebP</span>
+    </div>
+    <button class="btn" id="sample" style="width:100%;margin-top:8px" data-ic="sparkle">Essayer avec un exemple</button>
+    <div id="fileInfo" class="file hide">
+      <canvas id="thumb" width="112" height="112"></canvas>
+      <div><b id="fname"></b><span id="fpx"></span></div>
+      <button class="btn" id="change">Changer</button>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+  </section>
+
+  <section class="step locked" id="step2">
+    <div class="step-h"><span class="num">2</span><h2>La bibliothèque</h2><small id="libCount"></small></div>
+    <label class="search"><svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/></svg><input type="search" id="q" placeholder="Chercher : kraft, jean, usé…" aria-label="Chercher une texture"></label>
+    <div class="chips" id="chips"></div>
+    <div class="lib" id="lib"></div>
+    <div class="duo">
+      <button class="btn" id="ownBtn" data-ic="upload">Importer ma texture</button>
+    </div>
+    <input type="file" id="ownFile" accept="image/*" hidden>
+    <p class="hint">Un clic applique la texture à la couche sélectionnée (étape 3), avec ses réglages conseillés.</p>
+  </section>
+
+  <section class="step locked" id="step3">
+    <div class="step-h"><span class="num">3</span><h2>Les couches</h2></div>
+    <div class="layers" id="layers"></div>
+    <button class="btn" id="addLayer" style="width:100%" data-ic="plus">Ajouter une couche</button>
+    <div class="row">
+      <span><b>Seulement sur le motif</b><span class="tip" tabindex="0" data-tip="La texture ne touche pas le fond transparent ni le fond blanc : seul le dessin est texturé. Désactive-le pour texturer toute l'image.">?</span></span>
+      <input type="checkbox" class="switch" id="motif" checked>
+    </div>
+
+    <div id="lyBox">
+      <div class="lbl">Mode de fusion
+        <span class="tip" tabindex="0" data-tip="La façon dont la texture se mélange à ton visuel. « Produit » assombrit, « Écran » éclaircit, « Superposition » renforce le contraste, « Usure » efface l'encre comme un vieux t-shirt.">?</span></div>
+      <select class="sel" id="mode" aria-label="Mode de fusion"></select>
+      <div class="range">
+        <div class="range-h"><span>Opacité<span class="tip" tabindex="0" data-tip="La force de la texture : 0 % elle disparaît, 100 % elle est appliquée en entier.">?</span></span><output for="op"></output></div>
+        <input type="range" id="op" min="0" max="100" value="80">
+      </div>
+      <div class="range">
+        <div class="range-h"><span>Échelle<span class="tip" tabindex="0" data-tip="La taille du motif de texture. À 200 %, un carreau de texture couvre tout ton visuel. Plus petit = grain plus fin.">?</span></span><output for="scale"></output></div>
+        <input type="range" id="scale" min="10" max="400" value="100">
+      </div>
+      <div class="range">
+        <div class="range-h"><span>Rotation</span><output for="rot"></output></div>
+        <input type="range" id="rot" min="-180" max="180" value="0">
+      </div>
+      <div class="range">
+        <div class="range-h"><span>Position horizontale<span class="tip" tabindex="0" data-tip="Décale la texture pour placer une tache ou une éraflure ailleurs.">?</span></span><output for="px"></output></div>
+        <input type="range" id="px" min="-50" max="50" value="0">
+      </div>
+      <div class="range">
+        <div class="range-h"><span>Position verticale</span><output for="py"></output></div>
+        <input type="range" id="py" min="-50" max="50" value="0">
+      </div>
+      <div class="duo">
+        <button class="btn" id="reseed" data-ic="dice" title="Recalcule la texture avec un autre hasard">Autre tirage</button>
+        <button class="btn" id="inv" data-ic="swap" aria-pressed="false" title="Les clairs deviennent foncés et inversement">Inverser</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="step locked" id="step4">
+    <div class="step-h"><span class="num">4</span><h2>L'export</h2></div>
+    <div class="seg" data-name="fmt">
+      <button data-v="png" aria-pressed="true">PNG<small>transparent</small></button>
+      <button data-v="jpeg" aria-pressed="false">JPEG<small>léger</small></button>
+      <button data-v="webp" aria-pressed="false">WebP<small>web</small></button>
+      <button data-v="pdf" aria-pressed="false">PDF<small>imprimeur</small></button>
+    </div>
+    <div class="range" id="qBox">
+      <div class="range-h"><span>Qualité<span class="tip" tabindex="0" data-tip="Plus haut = plus net mais plus lourd. 85 % est un bon compromis. Le fond transparent devient blanc en JPEG.">?</span></span><output for="quality"></output></div>
+      <input type="range" id="quality" min="40" max="100" value="85">
+    </div>
+    <p class="hint" id="fmtHint"></p>
+    <div class="run-wrap"><button class="btn primary big" id="export" disabled data-ic="download">Exporter</button></div>
+  </section>
+</aside>
+
+<main class="work">
+  <div class="toolbar">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabBefore" aria-selected="false" disabled>Avant</button>
+      <button role="tab" id="tabAfter" aria-selected="true" disabled>Après</button>
+    </div>
+    <div class="zoom">
+      <button id="zOut" aria-label="Dézoomer"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+      <input type="range" id="zSlider" min="-5" max="3" step="0.02" value="0" aria-label="Niveau de zoom">
+      <button id="zIn" aria-label="Zoomer"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      <output id="zoomPct">—</output>
+      <button id="zFit" aria-label="Ajuster à la fenêtre" title="Ajuster"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></svg></button>
+    </div>
+  </div>
+
+  <div class="viewer" id="viewer">
+    <div class="empty" id="empty">
+      <h3>Prêt à texturer ?</h3>
+      <p>Dépose un visuel à gauche, choisis une texture et règle-la en direct. L'export garde la taille d'origine.</p>
+      <div class="how">
+        <div><svg class="ic" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg><b>1. Importe</b>Un logo, un dessin, une photo.</div>
+        <div><svg class="ic" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg><b>2. Texture</b>Papier, toile, grain, sérigraphie usée… empile-les.</div>
+        <div><svg class="ic" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 17v1.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V17"/></svg><b>3. Exporte</b>PNG transparent, JPEG, WebP ou PDF.</div>
+      </div>
+    </div>
+    <div id="stage"></div>
+    <div class="viewer-hint hide" id="viewerHint">Molette : zoomer · Glisser : se déplacer</div>
+    <div class="busy hide" id="busy"><div class="spin"></div><span id="busyTxt">Calcul…</span></div>
+  </div>
+</main>
+</div>
+
+<div class="modal hide" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="modal-box">
+    <button class="btn icon close" id="helpClose" aria-label="Fermer" data-ic="x"></button>
+    <h2 id="helpTitle">Le petit lexique des textures</h2>
+    <p>Les mots de l'outil, en une phrase chacun.</p>
+    <div class="gloss">
+      <div><b data-ic="layers">Couche</b>Une texture posée sur ton visuel. Tu peux en empiler plusieurs : par exemple un <em>papier</em> puis un <em>grain</em>.</div>
+      <div><b data-ic="blend">Mode de fusion</b>La règle de mélange entre la texture et le visuel, comme dans Photoshop.</div>
+      <div><b data-ic="blend">Produit</b>Assombrit : le blanc de la texture ne change rien, ses parties foncées salissent le visuel. Le plus utilisé.</div>
+      <div><b data-ic="blend">Superposition / Lumière douce</b>Renforce les reliefs de la texture en gardant les couleurs. Idéal pour le grain et la toile.</div>
+      <div><b data-ic="blend">Écran</b>L'inverse du produit : éclaircit. Pratique avec une texture inversée pour des rayures claires.</div>
+      <div><b data-ic="erase">Usure</b>Efface l'encre là où la texture est foncée. Donne l'effet « vieux t-shirt » ou sérigraphie craquelée, avec de vrais trous transparents.</div>
+      <div><b data-ic="dice">Texture procédurale</b>Une texture calculée par le code au lieu d'être une photo : elle est libre de droits, nette à toutes les tailles, et « Autre tirage » en donne une nouvelle version.</div>
+      <div><b data-ic="grid">Raccord</b>Chaque texture est un carreau qui se répète sans couture visible, comme un papier peint.</div>
+      <div><b data-ic="image">PNG, JPEG, WebP</b>PNG garde la transparence, JPEG est plus léger mais sans transparence, WebP est le format léger du web.</div>
+      <div><b data-ic="pdf">PDF</b>Le fichier à envoyer à l'imprimeur. L'image y est mise à sa taille d'origine en pixels.</div>
+      <div><b data-ic="info">CC0</b>Une licence « domaine public » : on peut utiliser l'image partout, même pour vendre, sans demander. On cite quand même l'auteur par politesse.</div>
+    </div>
+    <div class="credits" id="credits"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<!-- Textures photo libres (CC0) : facultatif, avec licence et crédit de chacune -->
+<script src="textures-cc0.js"></script>
+<script>
+// ============ Petits outils ============
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const S = { w:0, h:0, src:null, prev:null, out:null, maskPrev:null, maskFull:null, name:'visuel', layers:[], active:0, view:'after', zoom:0, cat:'all' };
+const tick = () => new Promise(r => setTimeout(r, 30));
+const hex2rgb = h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let toastT; function toast(t){ const e=$('#toast'); e.textContent=t; e.classList.add('on'); clearTimeout(toastT); toastT=setTimeout(()=>e.classList.remove('on'),4200); }
+function rng(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const hash = s => [...s].reduce((h,c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 2166136261) >>> 0;
+const mk = (w, h=w) => Object.assign(document.createElement('canvas'), {width:w, height:h});
+const base = () => S.name.replace(/[\\/:*?"<>|]+/g, '-');
+
+// ============ Pictos ============
+const IC = {
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>', x:'<path d="M6 6l12 12M18 6 6 18"/>',
+  layers:'<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  download:'<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 17v1.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V17"/>',
+  upload:'<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/>',
+  pdf:'<path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h5"/>',
+  image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
+  sparkle:'<path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>',
+  dice:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h.01M15 15h.01M15 9h.01M9 15h.01"/>',
+  swap:'<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>',
+  eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  eyeoff:'<path d="M3 3l18 18M10.6 6A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-2.6 3.4M6.3 7.6C3.9 9.3 2.5 12 2.5 12S6 18.5 12 18.5c1.6 0 3-.4 4.2-1.1"/>',
+  trash:'<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/>',
+  blend:'<circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/>',
+  erase:'<path d="m4 16 8-8 6 6-5 5H8z"/><path d="M13 19h7"/>',
+  grid:'<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M12 4v16M4 12h16"/>',
+};
+const ic = n => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${IC[n]}</svg>`;
+$$('[data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', ic(el.dataset.ic)));
+
+// ============ Moteur de textures (procédurales, raccord sans couture) ============
+// Tout est défini en coordonnées 0..1 du carreau : la texture a le même aspect quelle que soit sa résolution N.
+const cl = v => v < 0 ? 0 : v > 1 ? 1 : v;
+const lv = (x, a, b) => cl((x - a) / (b - a));
+const frc = x => x - Math.floor(x);
+const TAU = Math.PI * 2;
+function noise(r, cx, cy=cx){   // bruit de valeur périodique : cx × cy cases par carreau
+  cx = Math.max(1, cx|0); cy = Math.max(1, cy|0);
+  const g = new Float32Array(cx*cy); for (let i=0;i<g.length;i++) g[i] = r();
+  return (u, v) => {
+    const x = u*cx, y = v*cy; let xi = Math.floor(x), yi = Math.floor(y), fx = x-xi, fy = y-yi;
+    xi %= cx; if (xi < 0) xi += cx; yi %= cy; if (yi < 0) yi += cy;
+    const x1 = xi+1 === cx ? 0 : xi+1, y1 = yi+1 === cy ? 0 : yi+1;
+    fx = fx*fx*(3-2*fx); fy = fy*fy*(3-2*fy);
+    const a = g[yi*cx+xi], b = g[yi*cx+x1], c = g[y1*cx+xi], d = g[y1*cx+x1];
+    return a + (b-a)*fx + (c-a)*fy + (a-b-c+d)*fx*fy;
+  };
+}
+function fbm(r, cx, cy=cx, oct=5, gain=.5){
+  const L = [], A = []; let a = 1, s = 0;
+  for (let o=0; o<oct && (cx<<o) <= 512 && (cy<<o) <= 512; o++){ L.push(noise(r, cx<<o, cy<<o)); A.push(a); s += a; a *= gain; }
+  return (u, v) => { let t = 0; for (let i=0;i<L.length;i++) t += L[i](u,v)*A[i]; return t/s; };
+}
+function worley(r, n){   // cellules (pierre, craquelures), périodiques
+  const P = new Float32Array(n*n*3); for (let i=0;i<P.length;i++) P[i] = r();
+  const o = {f1:0, f2:0, id:0};
+  return (u, v) => {
+    const x = u*n, y = v*n, xi = Math.floor(x), yi = Math.floor(y); let f1 = 9, f2 = 9, id = 0;
+    for (let j=-1;j<=1;j++){ const cy = yi+j, wy = ((cy%n)+n)%n;
+      for (let i=-1;i<=1;i++){ const cx = xi+i, wx = ((cx%n)+n)%n, k = (wy*n+wx)*3, dx = cx+P[k]-x, dy = cy+P[k+1]-y, d = dx*dx+dy*dy;
+        if (d < f1){ f2 = f1; f1 = d; id = P[k+2]; } else if (d < f2) f2 = d; } }
+    o.f1 = Math.sqrt(f1); o.f2 = Math.sqrt(f2); o.id = id; return o;
+  };
+}
+function gen(N, f){ const a = new Float32Array(N*N); let i = 0; for (let y=0;y<N;y++){ const v = (y+.5)/N; for (let x=0;x<N;x++) a[i++] = f((x+.5)/N, v); } return a; }
+function norm(a){ let lo = Infinity, hi = -Infinity; for (const v of a){ if (v < lo) lo = v; if (v > hi) hi = v; } const k = 1/(hi-lo || 1); for (let i=0;i<a.length;i++) a[i] = (a[i]-lo)*k; return a; }
+function emboss(a, N, k){ const o = new Float32Array(N*N), s = k*N/64;
+  for (let y=0;y<N;y++){ const ym = ((y-1+N)%N)*N; for (let x=0;x<N;x++) o[y*N+x] = .5 + s*(a[y*N+x] - a[ym+(x-1+N)%N]); } return o; }
+function blur(a, N, r){   // flou périodique (2 passes de moyenne glissante)
+  r = Math.max(1, Math.round(r)); const t = new Float32Array(N*N), o = new Float32Array(N*N), k = 1/(2*r+1), w = i => ((i%N)+N)%N;
+  for (let y=0;y<N;y++){ const row = y*N; let s = 0; for (let i=-r;i<=r;i++) s += a[row+w(i)];
+    for (let x=0;x<N;x++){ t[row+x] = s*k; s += a[row+w(x+r+1)] - a[row+w(x-r)]; } }
+  for (let x=0;x<N;x++){ let s = 0; for (let i=-r;i<=r;i++) s += t[w(i)*N+x];
+    for (let y=0;y<N;y++){ o[y*N+x] = s*k; s += t[w(y+r+1)*N+x] - t[w(y-r)*N+x]; } }
+  return o;
+}
+function paint(N, a, stops=['#000000','#ffffff']){   // valeurs 0..1 → dégradé de couleurs
+  const C = stops.map(hex2rgb), n = C.length-1, c = mk(N), x = c.getContext('2d'), im = x.createImageData(N,N), d = im.data;
+  for (let i=0;i<a.length;i++){ const t = cl(a[i]), p = Math.min(n-1, Math.floor(t*n)), f = t*n-p, A = C[p], B = C[p+1];
+    d[i*4] = A[0]+(B[0]-A[0])*f; d[i*4+1] = A[1]+(B[1]-A[1])*f; d[i*4+2] = A[2]+(B[2]-A[2])*f; d[i*4+3] = 255; }
+  x.putImageData(im, 0, 0); return c;
+}
+const P = (N, f, stops, n=true) => paint(N, n ? norm(gen(N,f)) : gen(N,f), stops);
+// Dessin d'éléments (fibres, points, rayures) répété aux bords pour garder le raccord
+function scatter(c, n, r, fn){
+  const N = c.width, x = c.getContext('2d'), seeds = Array.from({length:n}, () => r()*4294967296|0);
+  x.lineCap = 'round';
+  for (const dx of [-N,0,N]) for (const dy of [-N,0,N]){ x.setTransform(1,0,0,1,dx,dy); for (const s of seeds) fn(x, rng(s), N/512, N); }
+  x.setTransform(1,0,0,1,0,0); x.globalAlpha = 1; return c;
+}
+const pick = (q, a) => a[Math.floor(q()*a.length)];
+const fiber = (cols, l0, l1, w0, w1, a0, a1) => (x, q, u, N) => {
+  const px = q()*N, py = q()*N, a = q()*TAU, l = (l0+q()*(l1-l0))*u, b = (q()-.5)*l*.7, dx = Math.cos(a)*l/2, dy = Math.sin(a)*l/2;
+  x.strokeStyle = pick(q, cols); x.globalAlpha = a0+q()*(a1-a0); x.lineWidth = (w0+q()*(w1-w0))*u;
+  x.beginPath(); x.moveTo(px-dx, py-dy); x.quadraticCurveTo(px-Math.sin(a)*b, py+Math.cos(a)*b, px+dx, py+dy); x.stroke();
+};
+const dot = (cols, r0, r1, a0, a1, pw=1) => (x, q, u, N) => {
+  const px = q()*N, py = q()*N, rr = (r0+q()**pw*(r1-r0))*u;
+  x.fillStyle = pick(q, cols); x.globalAlpha = a0+q()*(a1-a0); x.beginPath(); x.arc(px, py, rr, 0, TAU); x.fill();
+};
+const scratch = (dir, spread, l0, l1, w0, w1, a0, a1, col='#000000') => (x, q, u, N) => {
+  const a = q() < .7 ? dir + (q()-.5)*spread : q()*TAU;
+  const px = q()*N, py = q()*N, l = (l0+q()*(l1-l0))*u, b = (q()-.5)*l*.15;
+  x.strokeStyle = col; x.globalAlpha = a0+q()*(a1-a0); x.lineWidth = (w0+q()*(w1-w0))*u;
+  x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px+Math.cos(a)*l/2-Math.sin(a)*b, py+Math.sin(a)*l/2+Math.cos(a)*b, px+Math.cos(a)*l, py+Math.sin(a)*l); x.stroke();
+};
+function weave(r, n, {slub=0, gap=0, twill=false}={}){   // tissage : fils de chaîne et de trame qui passent dessus/dessous
+  const s1 = fbm(r, 2, n, 3), s2 = fbm(r, n, 2, 3), tone = noise(r, n, n), w = noise(r, 512);
+  return (u, v) => {
+    const X = u*n, Y = v*n, ix = Math.floor(X), iy = Math.floor(Y), fx = X-ix, fy = Y-iy;
+    const top = twill ? (ix+iy) % 4 < 2 : (ix+iy) % 2 === 0;
+    const pw = Math.sin(Math.PI*fx) ** (.6 + slub*s1(u,v)*1.6), pf = Math.sin(Math.PI*fy) ** (.6 + slub*s2(u,v)*1.6);
+    let val = top ? pw*(.7+.3*Math.sin(Math.PI*fy)) : pf*(.7+.3*Math.sin(Math.PI*fx));
+    if (gap) val *= lv(Math.max(pw, pf), .12, .45);
+    return val*(.8+.2*tone(u,v)) + .1*(w(u,v)-.5);
+  };
+}
+function crackle(r, n, warp, w0, w1){
+  const wx = fbm(r, 6, 6, 3), wy = fbm(r, 6, 6, 3), W = worley(r, n);
+  return (u, v) => { const o = W(u+warp*(wx(u,v)-.5), v+warp*(wy(u,v)-.5)); return lv(o.f2-o.f1, w0, w1); };
+}
+function wood(N, r, rings, stops, k=10){
+  const f = rings ? fbm(r, 3, 3, 4) : fbm(r, 1, 8, 5), fine = fbm(r, 4, 256, 2);
+  return P(N, (u, v) => {
+    const t = rings ? Math.sqrt(Math.sin(Math.PI*u)**2 + Math.sin(Math.PI*v)**2)/Math.SQRT2*k + 1.5*f(u,v) : v*k + 2.2*f(u,v);
+    return .65*((.5+.5*Math.sin(TAU*t))**2) + .35*fine(u,v);
+  }, stops);
+}
+
+// Chaque texture : id, nom, catégorie, réglages conseillés (mode, opacité, échelle, rotation) et son générateur
+const CATS = { all:'Toutes', grain:'Grain & bruit', papier:'Papier & carton', textile:'Textile', mineral:'Minéral', bois:'Bois', metal:'Métal & rouille', matiere:'Cuir & matières', usure:'Usure & grunge', trame:'Trames & impression', encre:'Encre & peinture', photo:'Photos CC0', mine:'Mes textures' };
+const LIB = [], TEX = {};
+const T = (id, n, c, d, g) => { const t = {id, n, c, m:d.m||'multiply', o:d.o ?? 80, s:d.s ?? 200, rot:d.rot || 0, kw:d.kw || '', h:hash(id), g}; LIB.push(t); TEX[id] = t; };
+const GRAY = ['#000000','#ffffff'];
+
+// --- Grain & bruit
+T('grain-fin','Grain fin','grain',{m:'overlay',o:45,s:60}, (N,r) => { const w = noise(r,512); return P(N, w, ['#404040','#c0c0c0']); });
+T('grain-moyen','Grain moyen','grain',{m:'overlay',o:50,s:70}, (N,r) => { const a = noise(r,256), b = noise(r,512); return P(N, (u,v) => a(u,v)+.4*b(u,v), ['#3a3a3a','#c6c6c6']); });
+T('grain-gros','Gros grain','grain',{m:'overlay',o:50,s:80}, (N,r) => { const a = fbm(r,128,128,2); return P(N, a, ['#303030','#d0d0d0']); });
+T('grain-film','Grain argentique','grain',{m:'overlay',o:50,s:60,kw:'photo film'}, (N,r) => { const a = noise(r,512), b = noise(r,512), c = noise(r,512), f = fbm(r,32,32,3); return P(N, (u,v) => a(u,v)+b(u,v)+c(u,v)+f(u,v), ['#2e2e2e','#d2d2d2']); });
+T('nuages','Bruit nuageux','grain',{m:'soft-light',o:70,kw:'nuage doux'}, (N,r) => P(N, fbm(r,4,4,6), ['#202020','#e0e0e0']));
+T('bruit-contraste','Bruit contrasté','grain',{m:'overlay',o:50}, (N,r) => { const f = fbm(r,8,8,5), a = norm(gen(N,f)); return paint(N, a.map(x => lv(x,.25,.75)), ['#202020','#e0e0e0']); });
+T('turbulence','Turbulence','grain',{m:'multiply',o:60,kw:'veines'}, (N,r) => { const f = fbm(r,4,4,6); return P(N, (u,v) => lv(Math.abs(f(u,v)-.5), 0, .1), ['#6a6a6a','#ffffff'], false); });
+T('sable','Sable','grain',{m:'multiply',o:70}, (N,r) => { const f = fbm(r,16,16,4), w = noise(r,512), s = noise(r,384); return P(N, (u,v) => .9+.1*f(u,v)+.04*w(u,v)-.5*lv(s(u,v),.82,.95), ['#8a8070','#fbf8f2']); });
+
+// --- Papier & carton
+T('papier-lisse','Papier lisse','papier',{m:'multiply',o:80}, (N,r) => { const f = fbm(r,16,16,5), w = noise(r,512); return P(N, (u,v) => .7*f(u,v)+.3*w(u,v), ['#e6e3dc','#ffffff']); });
+T('papier-torchon','Papier aquarelle','papier',{m:'soft-light',o:85,kw:'torchon relief'}, (N,r) => { const W = worley(r,40), f = fbm(r,24,24,3); return paint(N, emboss(norm(gen(N,(u,v) => .6*W(u,v).f1+.4*f(u,v))), N, .6), GRAY); });
+T('papier-recycle','Papier recyclé','papier',{m:'multiply',o:85,kw:'fibres'}, (N,r) => { const f = fbm(r,12,12,5), w = noise(r,512);
+  const c = P(N, (u,v) => .7*f(u,v)+.3*w(u,v), ['#e8e2d4','#faf7f0']);
+  scatter(c, 320, r, fiber(['#7d7d7d','#8a6f52','#5b6e8f','#a35a4a','#b9b2a5'], 6, 26, .5, 1.2, .25, .6));
+  return scatter(c, 450, r, dot(['#55504a'], .3, 1.2, .3, .7, 2)); });
+T('papier-froisse','Papier froissé','papier',{m:'soft-light',o:90,kw:'plis'}, (N,r) => { const a = fbm(r,3,3,4), b = fbm(r,5,5,4), c = fbm(r,8,8,3);
+  return paint(N, emboss(norm(gen(N,(u,v) => -(Math.abs(a(u,v)-.5)+.7*Math.abs(b(u,v)-.5)+.4*Math.abs(c(u,v)-.5)))), N, 2), GRAY); });
+T('papier-verge','Papier vergé','papier',{m:'multiply',o:80,kw:'lignes ancien'}, (N,r) => { const f = fbm(r,8,8,4), w = noise(r,512);
+  return P(N, (u,v) => { const ch = frc(u*6); return .94+.03*f(u,v)+.02*w(u,v)-.04*(.5+.5*Math.cos(TAU*v*128))-.06*(1-lv(Math.min(ch,1-ch),0,.012)); }, ['#2b2620','#fffdf7'], false); });
+T('kraft','Kraft','papier',{m:'multiply',o:100,kw:'marron carton brun'}, (N,r) => { const f = fbm(r,10,10,5), w = noise(r,512), g = fbm(r,2,48,3);
+  const c = P(N, (u,v) => .55*f(u,v)+.25*w(u,v)+.2*g(u,v), ['#8d6a45','#b98e5f','#d1ab7d']);
+  return scatter(c, 500, r, fiber(['#6e4d2c','#e3c79d','#5a3d22'], 5, 30, .4, 1, .2, .5)); });
+T('carton-ondule','Carton ondulé','papier',{m:'multiply',o:90,kw:'cannelure'}, (N,r) => { const f = fbm(r,8,8,4), w = noise(r,512); return P(N, (u,v) => .3*(.5+.5*Math.cos(TAU*u*24))+.1*f(u,v)+.08*w(u,v), ['#7a5a38','#b38c5e','#d4b384']); });
+T('carton-gris','Carton gris','papier',{m:'multiply',o:90,kw:'recyclé'}, (N,r) => { const f = fbm(r,12,12,5), w = noise(r,512);
+  const c = P(N, (u,v) => .6*f(u,v)+.4*w(u,v), ['#8c8a85','#cfccc5']);
+  scatter(c, 260, r, fiber(['#6d6b66','#e2dfd8'], 4, 18, .4, 1, .3, .6));
+  return scatter(c, 600, r, dot(['#ffffff','#3e3c38'], .3, 1.5, .4, .8, 2)); });
+T('papier-journal','Papier journal','papier',{m:'multiply',o:90,kw:'jauni'}, (N,r) => { const f = fbm(r,10,10,5), w = noise(r,512);
+  return scatter(P(N, (u,v) => .6*f(u,v)+.4*w(u,v), ['#d6d0bf','#efe9d8']), 160, r, fiber(['#9a9384'], 4, 16, .4, .8, .1, .3)); });
+T('washi','Papier japonais','papier',{m:'multiply',o:80,kw:'washi fibres longues'}, (N,r) => { const f = fbm(r,6,6,5);
+  const c = P(N, f, ['#e6dfcc','#f8f4ea']);
+  return scatter(c, 180, r, fiber(['#ffffff','#bfb39a','#d8ceb6'], 40, 160, .4, 1.4, .3, .6)); });
+T('papier-peint','Papier à grain fort','papier',{m:'soft-light',o:80,kw:'canson relief'}, (N,r) => { const f = fbm(r,64,64,3); return paint(N, emboss(norm(gen(N,f)), N, .35), GRAY); });
+
+// --- Textile
+T('toile','Toile','textile',{m:'overlay',o:55,s:80,kw:'canvas coton tissage'}, (N,r) => P(N, weave(r,64), ['#4a4a4a','#d8d8d8']));
+T('lin','Lin','textile',{m:'overlay',o:60,s:80,kw:'tissage irrégulier'}, (N,r) => P(N, weave(r,48,{slub:.8}), ['#5f5a50','#e9e3d6']));
+T('jean','Jean (denim)','textile',{m:'multiply',o:70,s:70,kw:'sergé bleu indigo'}, (N,r) => P(N, weave(r,96,{twill:true}), ['#1f2f55','#4a6390','#c9d3e3']));
+T('serge','Sergé','textile',{m:'overlay',o:50,s:70,kw:'diagonale twill'}, (N,r) => P(N, weave(r,96,{twill:true}), ['#454545','#d4d4d4']));
+T('jersey','Jersey (maille)','textile',{m:'overlay',o:55,s:60,kw:'tricot t-shirt'}, (N,r) => { const w = noise(r,512), t = noise(r,40,56);
+  return P(N, (u,v) => { const fx = frc(u*40), fy = frc(v*56), sh = Math.sin(Math.PI*fy)**.5, l = 1-Math.abs(fx-(.1+.35*fy))/.2, rr = 1-Math.abs(fx-(.9-.35*fy))/.2;
+    return Math.max(cl(l), cl(rr))*sh*(.8+.2*t(u,v)) + .1*w(u,v); }, ['#404040','#d6d6d6']); });
+T('feutre','Feutre','textile',{m:'overlay',o:50,kw:'laine fibres'}, (N,r) => scatter(P(N, fbm(r,8,8,4), ['#707070','#909090']), 5000, r, fiber(['#ffffff','#000000'], 4, 14, .3, .6, .06, .14)));
+T('tissage-serre','Tissage serré','textile',{m:'overlay',o:45,s:80,kw:'popeline fin'}, (N,r) => P(N, weave(r,128), ['#6a6a6a','#c8c8c8']));
+T('velours','Velours côtelé','textile',{m:'overlay',o:60,kw:'côtes'}, (N,r) => { const s = noise(r,256,8), f = fbm(r,4,4,4); return P(N, (u,v) => Math.sin(Math.PI*frc(u*24))**.5*.65+.2*s(u,v)+.15*f(u,v), ['#303030','#d8d8d8']); });
+T('jute','Toile de jute','textile',{m:'multiply',o:80,s:90,kw:'sac grosse toile'}, (N,r) => P(N, weave(r,24,{slub:.6, gap:1}), ['#3b2a17','#8c6a40','#d1b282']));
+
+// --- Minéral
+const concrete = (r) => { const a = fbm(r,6,6,6), b = fbm(r,48,48,3), w = noise(r,512); return (u,v) => .5*a(u,v)+.3*b(u,v)+.2*w(u,v); };
+T('beton','Béton','mineral',{m:'multiply',o:80,kw:'ciment mur'}, (N,r) => scatter(P(N, concrete(r), ['#8f8f8b','#d8d7d2']), 300, r, dot(['#5b5a57'], .4, 2.5, .3, .7, 2)));
+T('beton-banche','Béton banché','mineral',{m:'multiply',o:80,kw:'coffrage planches'}, (N,r) => { const f = concrete(r), tones = Array.from({length:4}, r);
+  const c = P(N, (u,v) => { const p = frc(v*4); return f(u,v)*.8 + .2*tones[Math.floor(v*4)] - .5*(1-lv(Math.min(p,1-p),0,.004)); }, ['#77766f','#d6d4ce']);
+  const x = c.getContext('2d'), u = N/512;
+  for (let i=0;i<3;i++) for (let j=0;j<4;j++){ x.fillStyle = 'rgba(40,40,38,.6)'; x.beginPath(); x.arc((i+.5)/3*N, (j+.5)/4*N, 6*u, 0, TAU); x.fill(); }
+  return scatter(c, 200, r, dot(['#5b5a57'], .4, 2, .3, .6, 2)); });
+T('pierre','Pierre','mineral',{m:'multiply',o:70,kw:'dallage pavé'}, (N,r) => { const W = worley(r,6), f = fbm(r,8,8,5);
+  return P(N, (u,v) => { const o = W(u,v); return (.6+.4*o.id)*(.75+.25*f(u,v))*lv(o.f2-o.f1, 0, .08); }, ['#4d4a45','#cfc9bd']); });
+T('marbre','Marbre','mineral',{m:'multiply',o:60,kw:'veines'}, (N,r) => { const f = fbm(r,4,4,6), g = fbm(r,8,8,4);
+  return P(N, (u,v) => 1-.55*(1-Math.abs(Math.sin(TAU*(u*2+v)+9*f(u,v))))**12-.1*g(u,v), ['#2e2e33','#ffffff'], false); });
+T('granit','Granit','mineral',{m:'multiply',o:60,kw:'moucheté'}, (N,r) => { const a = noise(r,256), b = noise(r,256), d = noise(r,128), w = noise(r,512);
+  return P(N, (u,v) => (a(u,v) > .72 ? .05 : b(u,v) > .7 ? .45 : d(u,v) < .3 ? .6 : .92) + .06*w(u,v), ['#1c1c1c','#9b7d76','#e7e4df'], false); });
+T('ardoise','Ardoise','mineral',{m:'overlay',o:60,kw:'schiste'}, (N,r) => { const a = norm(gen(N, fbm(r,2,24,5))), e = emboss(a, N, 2); return paint(N, a.map((x,i) => .5*x+.5*e[i]), ['#2f3438','#7a8288']); });
+T('craquele','Craquelé','mineral',{m:'multiply',o:70,kw:'fissures sec'}, (N,r) => P(N, (f => (u,v) => .25+.75*f(u,v))(crackle(r,9,.08,.015,.05)), GRAY, false));
+T('platre','Plâtre','mineral',{m:'soft-light',o:80,kw:'enduit mur'}, (N,r) => paint(N, emboss(norm(gen(N, fbm(r,10,10,6))), N, 2.5), GRAY));
+T('asphalte','Asphalte','mineral',{m:'overlay',o:60,kw:'goudron route'}, (N,r) => { const a = noise(r,256), g = noise(r,96), f = fbm(r,16,16,4);
+  return P(N, (u,v) => g(u,v) > .72 ? .85 : a(u,v) < .25 ? .1 : .3+.3*f(u,v), ['#1e1e1e','#9a9a9a'], false); });
+
+// --- Bois
+T('bois-veine','Bois veiné','bois',{m:'multiply',o:80,kw:'planche chêne'}, (N,r) => wood(N, r, false, ['#6d4527','#a8774c','#d4a777']));
+T('bois-cernes','Bois (cernes)','bois',{m:'multiply',o:80,kw:'rondin anneaux'}, (N,r) => wood(N, r, true, ['#6d4527','#a8774c','#d4a777'], 14));
+T('contreplaque','Contreplaqué','bois',{m:'multiply',o:70,kw:'clair bouleau'}, (N,r) => wood(N, r, false, ['#b48b5e','#d9bb8e','#efdcb8'], 6));
+T('ecorce','Écorce','bois',{m:'overlay',o:70,kw:'arbre'}, (N,r) => { const f = fbm(r,10,2,5), a = norm(gen(N,(u,v) => (1-Math.abs(f(u,v)-.5)*2)**3)), e = emboss(a, N, 2); return paint(N, a.map((x,i) => .4*x+.6*e[i]), ['#3a2f26','#9b8a78']); });
+T('liege','Liège','bois',{m:'multiply',o:80,kw:'bouchon'}, (N,r) => { const a = noise(r,192), b = noise(r,64), f = fbm(r,16,16,4); return P(N, (u,v) => .5+.3*f(u,v)-.4*lv(a(u,v),.7,.8)+.2*lv(b(u,v),.75,.85), ['#6b4a2b','#c79a62','#e7c48f']); });
+
+// --- Usure & grunge
+T('grunge-leger','Grunge léger','usure',{m:'multiply',o:70,kw:'sale vieux'}, (N,r) => { const f = fbm(r,5,5,6), s = noise(r,512); return P(N, (u,v) => 1-.35*lv(f(u,v),.55,.72)-.5*lv(s(u,v),.88,.97), GRAY, false); });
+T('grunge-fort','Grunge fort','usure',{m:'multiply',o:80,kw:'sale vieux'}, (N,r) => { const f = fbm(r,6,6,6), wx = fbm(r,4,4,3), wy = fbm(r,4,4,3), s = noise(r,512);
+  const c = P(N, (u,v) => 1-.7*lv(f(u+.15*wx(u,v), v+.15*wy(u,v)),.5,.6)-.6*lv(s(u,v),.85,.95), GRAY, false);
+  return scatter(c, 40, r, scratch(r()*TAU, .5, 40, 200, .5, 1.5, .2, .5)); });
+T('eraflures','Éraflures','usure',{m:'multiply',o:70,kw:'rayures griffures'}, (N,r) => { const c = mk(N), x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0,0,N,N); return scatter(c, 150, r, scratch(r()*TAU, .6, 30, 260, .4, 1.6, .15, .6)); });
+T('micro-rayures','Micro-rayures','usure',{m:'multiply',o:60,kw:'rayures fines'}, (N,r) => { const c = mk(N), x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0,0,N,N); return scatter(c, 2500, r, scratch(0, TAU, 3, 24, .3, .8, .1, .35)); });
+T('poussiere','Poussière','usure',{m:'multiply',o:80,kw:'scan points cheveux'}, (N,r) => { const c = mk(N), x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0,0,N,N);
+  scatter(c, 1800, r, dot(['#000000','#333333'], .3, 1.8, .2, .8, 3));
+  return scatter(c, 30, r, fiber(['#222222'], 30, 120, .4, .7, .3, .6)); });
+T('taches','Taches','usure',{m:'multiply',o:70,kw:'auréoles café'}, (N,r) => { const f = fbm(r,4,4,6), wx = fbm(r,3,3,3), wy = fbm(r,3,3,3);
+  return P(N, (u,v) => { const t = f(u+.2*wx(u,v), v+.2*wy(u,v)); return 1-.15*lv(t,.6,.62)-.35*Math.exp(-Math.abs(t-.61)*120); }, ['#5a4a35','#ffffff'], false); });
+T('rouille','Rouille','usure',{m:'multiply',o:70,kw:'métal oxydé'}, (N,r) => { const f = fbm(r,6,6,6), s = fbm(r,40,40,3), w = noise(r,512); return P(N, (u,v) => .6*f(u,v)+.25*s(u,v)+.15*w(u,v), ['#4a1f0e','#8f3f17','#c46a2b','#e0a066']); });
+T('ecaillee','Peinture écaillée','usure',{m:'multiply',o:70,kw:'mur vieux'}, (N,r) => { const f = fbm(r,5,5,6), wx = fbm(r,6,6,3);
+  const a = gen(N, (u,v) => { const t = f(u+.1*wx(u,v), v); return 1-.25*lv(t,.58,.6)-.45*Math.exp(-Math.abs(t-.59)*90); }), e = emboss(a, N, 1);
+  return paint(N, a.map((x,i) => .7*x+.3*e[i]), GRAY); });
+T('serigraphie-usee','Sérigraphie usée','usure',{m:'erase',o:100,kw:'vintage t-shirt lavé effet usé'}, (N,r) => { const s = noise(r,512), f = fbm(r,6,6,5), st = fbm(r,2,64,3);
+  return P(N, (u,v) => 1-lv(s(u,v)+.35*(f(u,v)-.5),.78,.86)-.8*lv(f(u,v),.66,.72)-.6*lv(st(u,v),.64,.7), GRAY, false); });
+T('vintage','Vieilli','usure',{m:'multiply',o:60,kw:'vintage rétro'}, (N,r) => { const f = fbm(r,3,3,5), s = noise(r,512);
+  return scatter(P(N, (u,v) => .82+.15*f(u,v)-.5*lv(s(u,v),.92,.98), GRAY, false), 30, r, scratch(r()*TAU, 1, 40, 200, .4, 1, .1, .3)); });
+T('impression-craquelee','Impression craquelée','usure',{m:'erase',o:100,kw:'plastisol fissures t-shirt'}, (N,r) => P(N, crackle(r,12,.12,.03,.07), GRAY, false));
+T('lavage','Délavé','usure',{m:'erase',o:60,kw:'lavé passé t-shirt'}, (N,r) => { const f = fbm(r,3,3,6), s = noise(r,512); return P(N, (u,v) => .7*f(u,v)+.3*s(u,v), GRAY); });
+
+// --- Trames & impression
+const halftone = (N, r, n, rad) => { const aa = n/N; return P(N, (u,v) => { const d = Math.hypot(frc(u*n)-.5, frc(v*n)-.5); return lv(d-rad(u,v), -aa, aa); }, GRAY, false); };
+T('trame-points','Trame de points','trame',{m:'multiply',o:70,s:100,rot:45,kw:'halftone similé'}, (N,r) => { const f = fbm(r,3,3,4); return halftone(N, r, 48, (u,v) => .1+.4*cl((f(u,v)-.3)*2.5)); });
+T('trame-reguliere','Trame régulière','trame',{m:'multiply',o:60,s:60,rot:45,kw:'halftone points'}, (N,r) => halftone(N, r, 40, () => .32));
+T('trame-lignes','Trame de lignes','trame',{m:'multiply',o:60,s:100,rot:30,kw:'lignes gravure'}, (N,r) => { const f = norm(gen(N, fbm(r,3,3,4))), aa = 48/N;
+  return paint(N, f.map((t,i) => { const v = (Math.floor(i/N)+.5)/N, d = Math.abs(frc(v*48)-.5); return lv(d-(.05+.35*t), -aa, aa); }), GRAY); });
+T('risographie','Risographie','trame',{m:'multiply',o:55,kw:'riso grain impression'}, (N,r) => { const s = noise(r,512), f = fbm(r,6,6,5), b = fbm(r,1,6,3); return P(N, (u,v) => lv(.55*s(u,v)+.3*f(u,v)+.15*b(u,v), .42, .5), GRAY, false); });
+T('photocopie','Photocopie','trame',{m:'multiply',o:70,kw:'xerox toner'}, (N,r) => { const f = fbm(r,8,8,5), s = noise(r,512), st = fbm(r,64,1,2);
+  return P(N, (u,v) => 1-.9*lv(s(u,v),.86,.9)-.5*lv(st(u,v),.68,.76)-.25*lv(f(u,v),.6,.75), GRAY, false); });
+T('stochastique','Trame aléatoire','trame',{m:'multiply',o:60,kw:'stochastique pointillé'}, (N,r) => { const s = noise(r,512), f = fbm(r,4,4,5); return P(N, (u,v) => lv(s(u,v)-(.15+.6*f(u,v)), -.02, .02), GRAY, false); });
+T('hachures','Hachures','trame',{m:'multiply',o:70,s:100,kw:'croisillons gravure dessin'}, (N,r) => { const f = norm(gen(N, fbm(r,4,4,5)));
+  return paint(N, f.map((t,i) => { const u = (i%N+.5)/N, v = (Math.floor(i/N)+.5)/N, d1 = Math.abs(frc((u+v)*64)-.5), d2 = Math.abs(frc((u-v)*64)-.5);
+    return 1-Math.max((1-lv(d1,.1,.18))*lv(t,.42,.48), (1-lv(d2,.1,.18))*lv(t,.58,.64)); }), GRAY); });
+T('manque-encre','Manque d\'encre','trame',{m:'erase',o:100,kw:'racle sérigraphie traînées'}, (N,r) => { const st = fbm(r,1,48,5), s = noise(r,512); return P(N, (u,v) => 1-lv(st(u,v)+.2*(s(u,v)-.5),.6,.68), GRAY, false); });
+
+// --- Encre & peinture
+T('encre-bave','Encre qui bave','encre',{m:'multiply',o:80,kw:'buvard tache'}, (N,r) => { const f = fbm(r,5,5,6), wx = fbm(r,4,4,3), s = noise(r,512);
+  const A = gen(N, (u,v) => 1-lv(f(u+.12*wx(u,v), v),.5,.53)), B = blur(A, N, 6*N/512);
+  return paint(N, A.map((a,i) => 1-Math.max(a, .5*B[i]*(.7+.6*s((i%N)/N, Math.floor(i/N)/N)))), GRAY); });
+T('aquarelle','Aquarelle','encre',{m:'multiply',o:70,kw:'lavis'}, (N,r) => { const f = fbm(r,3,3,6), wx = fbm(r,4,4,3), wy = fbm(r,4,4,3), s = noise(r,512);
+  return P(N, (u,v) => { const t = f(u+.2*wx(u,v), v+.2*wy(u,v)); let o = 1;
+    for (const k of [.45,.53,.6]) o -= .1*lv(t,k,k+.02) + .15*Math.exp(-Math.abs(t-k)*150);
+    return o + .06*(s(u,v)-.5); }, ['#3a3a3a','#ffffff'], false); });
+T('pinceau-sec','Pinceau sec','encre',{m:'multiply',o:80,kw:'brosse traînées'}, (N,r) => { const st = fbm(r,2,96,4), m = fbm(r,1,3,3); return P(N, (u,v) => 1-lv(st(u,v),.48,.56)*lv(m(u,v),.35,.55), GRAY, false); });
+T('rouleau','Rouleau encreur','encre',{m:'multiply',o:60,kw:'bandes'}, (N,r) => { const b = fbm(r,1,10,4), w = noise(r,512); return P(N, (u,v) => .8+.15*b(u,v)+.05*w(u,v), GRAY); });
+T('eclaboussures','Éclaboussures','encre',{m:'multiply',o:80,kw:'splash projections'}, (N,r) => { const c = mk(N), x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0,0,N,N);
+  return scatter(c, 18, r, (x, q, u, N) => { const cx = q()*N, cy = q()*N, R = (6+q()*24)*u; x.fillStyle = '#000'; x.globalAlpha = .9;
+    x.beginPath(); x.arc(cx, cy, R, 0, TAU); x.fill();
+    for (let i=0, n = 14+q()*30; i<n; i++){ const a = q()*TAU, d = R*(1+q()*2.5), rr = R*(.04+q()*.25); x.beginPath(); x.ellipse(cx+Math.cos(a)*d, cy+Math.sin(a)*d, rr*(1+q()*1.5), rr, a, 0, TAU); x.fill(); } }); });
+T('craie','Craie','encre',{m:'erase',o:100,kw:'fusain crayon'}, (N,r) => { const s = noise(r,512), st = fbm(r,3,128,2); return P(N, (u,v) => 1-lv(.55*s(u,v)+.45*st(u,v),.58,.66), GRAY, false); });
+T('spray','Bombe (spray)','encre',{m:'multiply',o:80,kw:'graffiti aérosol'}, (N,r) => { const f = fbm(r,2,2,4), s = noise(r,512); return P(N, (u,v) => 1-lv(s(u,v)-(1-.5*f(u,v)), -.02, .02), GRAY, false); });
+
+// ============ Cache des carreaux ============
+const cache = new Map();
+function getTile(L, px, maxN){
+  const T = TEX[L.tex], erase = L.mode === 'erase';
+  if (T.photo && !T.img){ loadPhoto(T); return null; }
+  const N = T.img ? 0 : Math.min(maxN, Math.max(256, 2**Math.ceil(Math.log2(px))));
+  const key = `${L.tex}|${N}|${L.seed}|${+L.inv}|${+erase}`;
+  let c = cache.get(key);
+  if (c) cache.delete(key);
+  else {
+    c = T.img || T.g(N, rng(L.seed*7919 + T.h));
+    if (L.inv || erase){   // Usure : le foncé de la texture devient « trou » (transparence)
+      const o = mk(c.width, c.height), x = o.getContext('2d'); x.drawImage(c, 0, 0);
+      const im = x.getImageData(0, 0, o.width, o.height), d = im.data;
+      for (let i=0;i<d.length;i+=4){
+        if (L.inv){ d[i] = 255-d[i]; d[i+1] = 255-d[i+1]; d[i+2] = 255-d[i+2]; }
+        if (erase){ const l = (.299*d[i]+.587*d[i+1]+.114*d[i+2])/255; d[i+3] = (1-l)*d[i+3]; d[i] = d[i+1] = d[i+2] = 0; }
+      }
+      x.putImageData(im, 0, 0); c = o;
+    }
+  }
+  cache.set(key, c); if (cache.size > 16) cache.delete(cache.keys().next().value);
+  return c;
+}
+
+// ============ Composition ============
+function motifMask(src){   // alpha du visuel × « pas blanc »
+  const m = mk(src.width, src.height), x = m.getContext('2d'); x.drawImage(src, 0, 0);
+  const im = x.getImageData(0, 0, m.width, m.height), d = im.data;
+  for (let i=0;i<d.length;i+=4){ const w = Math.min(d[i], d[i+1], d[i+2]); d[i+3] *= w >= 250 ? 0 : w <= 225 ? 1 : (250-w)/25; }
+  x.putImageData(im, 0, 0); return m;
+}
+let tmpC = null;
+function compose(src, mask, maxN, out){
+  const W = src.width, H = src.height, long = Math.max(W, H);
+  if (!out || out.width !== W || out.height !== H) out = mk(W, H);
+  if (!tmpC || tmpC.width !== W || tmpC.height !== H) tmpC = mk(W, H);
+  const o = out.getContext('2d'), t = tmpC.getContext('2d');
+  o.globalCompositeOperation = 'copy'; o.globalAlpha = 1; o.drawImage(src, 0, 0);
+  for (const L of S.layers){
+    if (!L.on || !L.op) continue;
+    const px = long*.5*L.scale/100, tile = getTile(L, px, maxN); if (!tile) continue;
+    const pat = t.createPattern(tile, 'repeat');
+    pat.setTransform(new DOMMatrix().translate(W/2 + L.x/100*px, H/2 + L.y/100*px).rotate(L.rot).scale(px/Math.max(tile.width, tile.height)));
+    t.globalCompositeOperation = 'copy'; t.fillStyle = pat; t.fillRect(0, 0, W, H);
+    if (mask){ t.globalCompositeOperation = 'destination-in'; t.drawImage(mask, 0, 0); }
+    o.globalAlpha = L.op/100; o.globalCompositeOperation = L.mode === 'erase' ? 'destination-out' : L.mode;
+    o.drawImage(tmpC, 0, 0);
+  }
+  o.globalAlpha = 1; o.globalCompositeOperation = 'source-over';
+  return out;
+}
+let raf = 0;
+const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderNow(); }); };
+function renderNow(){
+  if (!S.w) return;
+  S.out = compose(S.prev, $('#motif').checked ? S.maskPrev : null, 1024, S.out); S.out._red = null;
+  render();
+}
+
+// ============ 1. Chargement ============
+$('#drop').onclick = $('#change').onclick = () => $('#file').click();
+$('#drop').onkeydown = e => (e.key==='Enter'||e.key===' ') && (e.preventDefault(), $('#file').click());
+$('#file').onchange = e => { e.target.files[0] && loadFile(e.target.files[0]); e.target.value=''; };
+['dragover','dragenter'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); $('#drop').classList.add('over'); }));
+['dragleave','drop'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); $('#drop').classList.remove('over'); }));
+document.addEventListener('drop', e => e.dataTransfer.files[0] && loadFile(e.dataTransfer.files[0]));
+function readImage(file, done){
+  if (!file.type.startsWith('image/')) return toast('Ce fichier n\'est pas une image (PNG, JPG, WebP…).');
+  const img = new Image();
+  img.onload = () => { const c = mk(img.naturalWidth, img.naturalHeight); c.getContext('2d').drawImage(img, 0, 0); URL.revokeObjectURL(img.src); done(c); };
+  img.onerror = () => toast('Impossible de lire cette image.');
+  img.src = URL.createObjectURL(file);
+}
+function loadFile(file){ readImage(file, c => { S.name = file.name.replace(/\.[^.]+$/,''); loadCanvas(c); }); }
+function loadCanvas(c){
+  const k = Math.min(1, 2000/Math.max(c.width, c.height)), prev = k < 1 ? mk(Math.round(c.width*k), Math.round(c.height*k)) : c;
+  if (k < 1){ const x = prev.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(c, 0, 0, prev.width, prev.height); }
+  Object.assign(S, { w:c.width, h:c.height, src:c, prev, maskPrev:motifMask(prev), maskFull:null, out:null, view:'after', zoom:0 });
+  const t = $('#thumb').getContext('2d'), s = Math.min(112/S.w, 112/S.h);
+  t.clearRect(0,0,112,112); t.drawImage(c, (112-S.w*s)/2, (112-S.h*s)/2, S.w*s, S.h*s);
+  $('#fname').textContent = S.name; $('#fpx').textContent = `${S.w} × ${S.h} pixels`;
+  $('#drop').classList.add('hide'); $('#sample').classList.add('hide'); $('#fileInfo').classList.remove('hide');
+  $$('.step.locked').forEach(s => s.classList.remove('locked'));
+  $('#export').disabled = false;
+  if (!S.layers.length) addLayer('papier-recycle');
+  renderNow();
+}
+$('#sample').onclick = async () => {
+  const c = mk(1400, 1000), x = c.getContext('2d'), font = '600 230px "Roboto Condensed", Arial, sans-serif';
+  try { await document.fonts.load(font); } catch {}
+  x.fillStyle = '#000'; x.beginPath(); x.arc(700, 430, 330, 0, TAU); x.fill();
+  x.fillStyle = '#fff'; x.font = font; x.textAlign = 'center'; x.fillText('ENCRE', 700, 510);
+  x.fillStyle = '#000'; x.fillRect(380, 820, 640, 70);
+  S.name = 'exemple'; loadCanvas(c);
+};
+
+// ============ 2. Bibliothèque ============
+const thumbs = {};
+function thumbOf(t){ if (t.photo) return t.timg; return thumbs[t.id] ||= (() => { const c = mk(128); if (t.img){ const x = c.getContext('2d'), s = Math.max(128/t.img.width, 128/t.img.height); x.drawImage(t.img, 0, 0, t.img.width*s, t.img.height*s); } else c.getContext('2d').drawImage(t.g(128, rng(7919 + t.h)), 0, 0); return c; })(); }
+function renderChips(){
+  const used = new Set(LIB.map(t => t.photo ? 'photo' : t.c).concat(LIB.map(t => t.c)));
+  $('#chips').innerHTML = Object.entries(CATS).filter(([k]) => k === 'all' || used.has(k))
+    .map(([k, n]) => `<button data-c="${k}" aria-pressed="${S.cat === k}">${n}</button>`).join('');
+}
+$('#chips').onclick = e => { const b = e.target.closest('button'); if (!b) return; S.cat = b.dataset.c; renderChips(); renderLib(); };
+$('#q').oninput = () => renderLib();
+const fold = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function renderLib(){
+  const q = fold($('#q').value.trim()), cur = S.layers[S.active]?.tex;
+  const list = LIB.filter(t => (S.cat === 'all' || t.c === S.cat || (S.cat === 'photo' && t.photo)) && (!q || fold(`${t.n} ${CATS[t.c]} ${t.kw} ${t.photo ? 'photo ' + t.src : ''}`).includes(q)));
+  $('#lib').innerHTML = list.length ? list.map(t => `<button class="tcard" data-id="${esc(t.id)}" aria-pressed="${t.id === cur}" title="${esc(t.credit || t.n)}">${t.photo ? `<img src="${t.thumb}" alt="" loading="lazy"><span class="ph">PHOTO</span>` : '<canvas width="128" height="128"></canvas>'}${esc(t.n)}</button>`).join('')
+    : '<div class="none">Aucune texture ne correspond.</div>';
+  $('#libCount').textContent = `${list.length} / ${LIB.length} textures`;
+  thumbQueue = $$('#lib .tcard').filter(b => b.firstChild.tagName === 'CANVAS'); thumbStep();
+}
+let thumbQueue = [], thumbBusy = false;
+function thumbStep(){   // vignettes calculées par petits paquets pour ne pas figer la page
+  if (thumbBusy) return; thumbBusy = true;
+  const t0 = performance.now();
+  while (thumbQueue.length && performance.now() - t0 < 30){ const b = thumbQueue.shift(); if (b.isConnected) b.firstChild.getContext('2d').drawImage(thumbOf(TEX[b.dataset.id]), 0, 0); }
+  thumbBusy = false;
+  if (thumbQueue.length) setTimeout(thumbStep, 0);
+}
+$('#lib').onclick = e => { const b = e.target.closest('.tcard'); if (!b) return; if (!S.w) return toast('Importe d\'abord un visuel.'); applyTex(b.dataset.id); };
+function applyTex(id){
+  const t = TEX[id], L = S.layers[S.active] || addLayer(id);
+  Object.assign(L, { tex:id, mode:t.m, op:t.o, scale:t.s, rot:t.rot, inv:false });
+  renderLayers(); renderLib(); renderNow();
+}
+function addImageTex(c, n, cat, extra={}){
+  const k = Math.min(1, 2048/Math.max(c.width, c.height)), img = k < 1 ? mk(Math.round(c.width*k), Math.round(c.height*k)) : c;
+  if (k < 1) img.getContext('2d').drawImage(c, 0, 0, img.width, img.height);
+  const id = cat + '-' + hash(n + LIB.length);
+  T(id, n, cat, {m:'multiply', o:80, ...extra}, null); TEX[id].img = img; Object.assign(TEX[id], extra);
+  return id;
+}
+$('#ownBtn').onclick = () => $('#ownFile').click();
+$('#ownFile').onchange = e => { const f = e.target.files[0]; e.target.value = '';
+  f && readImage(f, c => { const id = addImageTex(c, f.name.replace(/\.[^.]+$/,''), 'mine'); renderChips(); applyTex(id); toast('Texture ajoutée dans « Mes textures ».'); }); };
+// Textures photo CC0 : la liste (nom, crédit, vignette) est dans textures-cc0.js,
+// chaque image 2K est dans cc0/<id>.js et n'est chargée qu'à la demande.
+// (Une image .jpg lue en file:// bloquerait l'export : d'où des fichiers .js qui contiennent l'image.)
+function loadCC0(){
+  const list = window.TEXTURES_CC0 || [];
+  list.forEach(t => {
+    T(t.id, t.n, t.c, {m:t.m, o:t.o, s:200, kw:t.kw}, null);
+    Object.assign(TEX[t.id], { photo:true, src:t.src, thumb:t.thumb, timg:Object.assign(new Image(), {src:t.thumb}), credit:`${t.n} · ${t.author} · ${t.src} · CC0` });
+  });
+  if (list.length) $('#credits').innerHTML = `<details><summary><b>${list.length} textures photo libres de droits (CC0)</b> de Poly Haven et ambientCG : voir les crédits</summary><p>`
+    + list.map(t => `<a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.n)}</a> (${esc(t.author)}, ${esc(t.src)})`).join(' · ') + '</p></details>';
+}
+const loadedPhotos = [];
+function loadPhoto(T){
+  if (T.loading) return; T.loading = true; toast('Chargement de la texture photo…');
+  const tag = document.createElement('script'); tag.src = `cc0/${T.id}.js`;
+  tag.onerror = () => { T.loading = false; tag.remove(); toast('Texture photo introuvable (dossier cc0 manquant ?).'); };
+  document.head.appendChild(tag);
+}
+window.TX_CC0 = (id, data) => {
+  const T = TEX[id]; if (!T) return;
+  const img = new Image();
+  img.onload = () => {
+    const c = mk(img.naturalWidth, img.naturalHeight); c.getContext('2d').drawImage(img, 0, 0);
+    T.img = c; T.loading = false; loadedPhotos.push(T);
+    // garde en mémoire les photos utilisées + les 6 dernières (une photo 2K = 16 Mo)
+    const used = new Set(S.layers.map(L => L.tex));
+    while (loadedPhotos.length > 6){ const i = loadedPhotos.findIndex(p => !used.has(p.id)); if (i < 0) break; loadedPhotos.splice(i, 1)[0].img = null; }
+    $$('script[src^="cc0/"]').forEach(tag => tag.remove());
+    renderNow();
+  };
+  img.src = data;
+};
+
+// ============ 3. Couches ============
+const MODES = [['multiply','Produit'],['overlay','Superposition'],['soft-light','Lumière douce'],['hard-light','Lumière crue'],['screen','Écran'],['darken','Obscurcir'],['lighten','Éclaircir'],
+  ['color-burn','Densité couleur +'],['color-dodge','Densité couleur −'],['difference','Différence'],['exclusion','Exclusion'],['luminosity','Luminosité'],['source-over','Normal'],['erase','Usure (efface l\'encre)']];
+const MODE_N = Object.fromEntries(MODES);
+$('#mode').innerHTML = MODES.map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
+let seedN = 1;
+function addLayer(id){
+  const t = TEX[id]; const L = { tex:id, mode:t.m, op:t.o, scale:t.s, rot:t.rot, x:0, y:0, seed:seedN++, inv:false, on:true };
+  S.layers.push(L); S.active = S.layers.length-1; renderLayers(); return L;
+}
+$('#addLayer').onclick = () => { addLayer(S.layers.length ? 'grain-fin' : 'papier-recycle'); renderLib(); renderNow(); toast('Nouvelle couche : choisis sa texture dans la bibliothèque.'); };
+function renderLayers(){
+  $('#layers').innerHTML = S.layers.map((L, i) => `<div class="ly${i === S.active ? ' on' : ''}${L.on ? '' : ' off'}" data-i="${i}">
+    <canvas width="128" height="128"></canvas><div><b>${esc(TEX[L.tex].n)}</b><small>${MODE_N[L.mode]} · ${L.op} %</small></div>
+    <button class="btn icon" data-a="eye" aria-label="${L.on ? 'Masquer' : 'Afficher'} la couche">${ic(L.on ? 'eye' : 'eyeoff')}</button>
+    <button class="btn icon" data-a="del" aria-label="Supprimer la couche">${ic('trash')}</button></div>`).join('');
+  $$('#layers canvas').forEach((c, i) => { const im = thumbOf(TEX[S.layers[i].tex]), draw = () => c.getContext('2d').drawImage(im, 0, 0, 128, 128);
+    im.complete === false ? im.addEventListener('load', draw, {once:true}) : draw(); });
+  $('#lyBox').classList.toggle('hide', !S.layers.length);
+  const L = S.layers[S.active]; if (!L) return;
+  $('#mode').value = L.mode; $('#op').value = L.op; $('#scale').value = L.scale; $('#rot').value = L.rot; $('#px').value = L.x; $('#py').value = L.y;
+  $('#inv').setAttribute('aria-pressed', L.inv);
+  $$('#lyBox input[type=range]').forEach(syncOut);
+}
+$('#layers').onclick = e => {
+  const row = e.target.closest('.ly'); if (!row) return; const i = +row.dataset.i, a = e.target.closest('[data-a]')?.dataset.a;
+  if (a === 'eye') S.layers[i].on = !S.layers[i].on;
+  else if (a === 'del'){ S.layers.splice(i, 1); S.active = Math.min(S.active, S.layers.length-1); }
+  else S.active = i;
+  renderLayers(); renderLib(); renderNow();
+};
+const FMT = { op: v => v+' %', scale: v => v+' %', rot: v => v+'°', px: v => v+' %', py: v => v+' %', quality: v => v+' %' };
+const syncOut = r => { const o = $(`output[for="${r.id}"]`); if (o) o.textContent = FMT[r.id](r.value); };
+const KEY = { op:'op', scale:'scale', rot:'rot', px:'x', py:'y' };
+$$('#lyBox input[type=range]').forEach(r => r.addEventListener('input', () => {
+  const L = S.layers[S.active]; if (!L) return; L[KEY[r.id]] = +r.value; syncOut(r);
+  if (r.id === 'op') $(`.ly[data-i="${S.active}"] small`).textContent = `${MODE_N[L.mode]} · ${L.op} %`;
+  schedule();
+}));
+$('#mode').onchange = e => { const L = S.layers[S.active]; if (!L) return; L.mode = e.target.value; renderLayers(); renderNow(); };
+$('#reseed').onclick = () => { const L = S.layers[S.active]; if (!L) return; L.seed = seedN++ * 31 + 7; renderNow(); };
+$('#inv').onclick = () => { const L = S.layers[S.active]; if (!L) return; L.inv = !L.inv; renderLayers(); renderNow(); };
+$('#motif').onchange = renderNow;
+
+// ============ 4. Export ============
+const seg = name => $(`.seg[data-name="${name}"] [aria-pressed="true"]`).dataset.v;
+$$('.seg').forEach(g => g.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  $$(`.seg[data-name="${g.dataset.name}"] button`).forEach(x => x.setAttribute('aria-pressed', x === b)); fmtUI();
+}));
+const FMT_HINT = { png:'Garde la transparence. Le plus sûr pour le textile et la PAO.', jpeg:'Plus léger, sans transparence : le fond devient blanc.', webp:'Très léger, pour le web. Garde la transparence.', pdf:'Une page à la taille de l\'image, transparence gardée. Pour l\'imprimeur.' };
+function fmtUI(){ const f = seg('fmt'); $('#qBox').classList.toggle('hide', !['jpeg','webp'].includes(f)); $('#fmtHint').textContent = FMT_HINT[f]; }
+$('#quality').oninput = e => syncOut(e.target); syncOut($('#quality')); fmtUI();
+function save(blob, name){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+const toBlob = (c, type, q) => new Promise(res => c.toBlob(res, type, q));
+async function exportBlob(fmt, q = +$('#quality').value/100){   // à la taille d'origine
+  const out = compose(S.src, $('#motif').checked ? (S.maskFull ||= motifMask(S.src)) : null, 2048);
+  if (fmt === 'png') return toBlob(out, 'image/png');
+  if (fmt === 'webp') return toBlob(out, 'image/webp', q);
+  if (fmt === 'jpeg'){ const c = mk(out.width, out.height), x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(out, 0, 0); return toBlob(c, 'image/jpeg', q); }
+  const { jsPDF } = window.jspdf, w = S.w*.75, h = S.h*.75;   // 1 pixel = 1/96 de pouce
+  const doc = new jsPDF({ orientation: w > h ? 'l' : 'p', unit:'pt', format:[w, h], compress:true });
+  doc.addImage(out, 'PNG', 0, 0, w, h, undefined, 'FAST');
+  return doc.output('blob');
+}
+$('#export').onclick = async () => {
+  if (!window.jspdf && seg('fmt') === 'pdf') return toast('Le module PDF ne s\'est pas chargé (connexion internet ?).');
+  if (S.layers.some(L => L.on && TEX[L.tex].photo && !TEX[L.tex].img)) return toast('Une texture photo est encore en chargement, réessaie dans un instant.');
+  const fmt = seg('fmt'); busy(true, 'Export en cours…'); await tick();
+  try {
+    const b = await exportBlob(fmt);
+    if (fmt === 'webp' && b.type !== 'image/webp') toast('Ton navigateur ne sait pas créer de WebP : exporte en PNG ou JPEG.');
+    else { save(b, `${base()}_texture.${fmt === 'jpeg' ? 'jpg' : fmt}`); toast(`Export ${fmt.toUpperCase()} téléchargé (${S.w} × ${S.h} px, ${(b.size/1048576).toFixed(1).replace('.',',')} Mo).`); }
+  } catch (err){ console.error(err); toast('L\'export a échoué : image trop grande pour le navigateur ?'); }
+  busy(false);
+};
+function busy(on, t){ $('#busy').classList.toggle('hide', !on); if (t) $('#busyTxt').textContent = t; }
+
+// ============ Affichage / zoom (repris du Séparateur) ============
+function render(){
+  const has = !!S.w;
+  $('#empty').classList.toggle('hide', has);
+  $('#tabBefore').disabled = $('#tabAfter').disabled = !has;
+  if (!has){ $('#stage').replaceChildren(); return; }
+  $('#tabBefore').setAttribute('aria-selected', S.view === 'before');
+  $('#tabAfter').setAttribute('aria-selected', S.view === 'after');
+  applyZoom();
+}
+$('#tabBefore').onclick = () => { S.view = 'before'; render(); };
+$('#tabAfter').onclick = () => { S.view = 'after'; render(); };
+function reduced(full, targetW){
+  const chain = full._red || (full._red = [full]);
+  let i = 0;
+  while (chain[i].width/2 >= targetW){
+    if (!chain[i+1]){ const c = chain[i], n = mk(Math.round(c.width/2), Math.max(1, Math.round(c.height/2)));
+      const x = n.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(c,0,0,n.width,n.height); chain.push(n); }
+    i++;
+  }
+  return chain[i];
+}
+const ZMIN = 2**-5, ZMAX = 8;
+function applyZoom(){   // zoom exprimé par rapport aux pixels d'origine (l'aperçu peut être réduit)
+  const full = S.view === 'before' ? S.prev : S.out, st = $('#stage'), v = $('#viewer'); if (!full) return;
+  const z = S.zoom || Math.min((v.clientWidth-48)/S.w, (v.clientHeight-48)/S.h, 1);
+  const c = reduced(full, S.w*z*devicePixelRatio);
+  c.style.width = S.w*z + 'px';
+  if (st.firstChild !== c) st.replaceChildren(c);
+  S.curZ = z; $('#zoomPct').textContent = Math.max(1, Math.round(z*100)) + ' %';
+  $('#zSlider').value = Math.log2(z);
+  v.classList.toggle('grab', v.scrollWidth > v.clientWidth || v.scrollHeight > v.clientHeight);
+  $('#viewerHint').classList.remove('hide');
+}
+function zoomTo(z, cx, cy){
+  const v = $('#viewer'), c = $('#stage canvas'); if (!c) return;
+  z = Math.min(ZMAX, Math.max(ZMIN, z));
+  const vr = v.getBoundingClientRect(); cx ??= vr.left + vr.width/2; cy ??= vr.top + vr.height/2;
+  const r = c.getBoundingClientRect(), px = (cx - r.left)/S.curZ, py = (cy - r.top)/S.curZ;
+  S.zoom = z; applyZoom();
+  const r2 = $('#stage canvas').getBoundingClientRect();
+  v.scrollLeft += r2.left + px*z - cx; v.scrollTop += r2.top + py*z - cy;
+}
+const curZoom = () => S.curZ || 1;
+$('#zIn').onclick = () => zoomTo(curZoom()*1.5);
+$('#zOut').onclick = () => zoomTo(curZoom()/1.5);
+$('#zSlider').oninput = e => zoomTo(2**+e.target.value);
+$('#zFit').onclick = () => { S.zoom = 0; applyZoom(); };
+window.addEventListener('resize', () => !S.zoom && applyZoom());
+$('#viewer').addEventListener('wheel', e => { if (!S.w) return; e.preventDefault(); zoomTo(curZoom() * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX, e.clientY); }, {passive:false});
+{ let drag = null;
+  $('#viewer').addEventListener('pointerdown', e => {
+    if (e.button !== 0 || !$('#viewer').classList.contains('grab')) return;
+    drag = {x:e.clientX, y:e.clientY, l:$('#viewer').scrollLeft, t:$('#viewer').scrollTop};
+    $('#viewer').classList.add('grabbing'); $('#viewer').setPointerCapture(e.pointerId);
+  });
+  $('#viewer').addEventListener('pointermove', e => { if (!drag) return; const v = $('#viewer'); v.scrollLeft = drag.l - (e.clientX-drag.x); v.scrollTop = drag.t - (e.clientY-drag.y); });
+  const end = () => { drag = null; $('#viewer').classList.remove('grabbing'); };
+  $('#viewer').addEventListener('pointerup', end); $('#viewer').addEventListener('pointercancel', end);
+}
+
+// ============ Lexique ============
+$('#helpBtn').onclick = () => $('#help').classList.remove('hide');
+$('#helpClose').onclick = () => $('#help').classList.add('hide');
+$('#help').onclick = e => e.target.id === 'help' && $('#help').classList.add('hide');
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#help').classList.add('hide'); });
+
+loadCC0(); renderChips(); renderLib(); renderLayers(); render();
+
+// ============ Auto-tests (console) ============
+(() => {
+  console.assert(LIB.filter(t => t.g).length >= 40, 'moins de 40 textures procédurales');
+  // Raccord : un bruit périodique doit valoir la même chose en u = 0 et u = 1
+  const f = fbm(rng(1), 4, 4, 4); console.assert(Math.abs(f(0, .3) - f(1, .3)) < 1e-6, 'bruit non périodique');
+  // Le masque « motif » ne doit pas texturer un pixel transparent ni blanc
+  const c = mk(3, 1), x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(1, 0, 1, 1); x.fillStyle = '#31412f'; x.fillRect(2, 0, 1, 1);
+  const m = motifMask(c).getContext('2d').getImageData(0, 0, 3, 1).data;
+  console.assert(m[3] === 0 && m[7] === 0 && m[11] === 255, 'masque motif faux');
+})();
+</script>
+</body>
+</html>

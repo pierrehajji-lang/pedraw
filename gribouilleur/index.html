@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gribouilleur · PDW</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<link rel="stylesheet" href="../assets/outils.css">
+<script src="../assets/outils.js"></script>
+<style>
+.brushes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.bcard{border:1.5px solid var(--line);border-radius:2px;background:var(--panel);padding:3px 3px 5px;cursor:pointer;font:inherit;font-size:11.5px;color:var(--ink);display:flex;flex-direction:column;gap:3px;align-items:center}
+.bcard canvas{width:100%;aspect-ratio:3/2;border-radius:2px;background:#fff;display:block}
+.bcard:hover{border-color:var(--ink)}
+.bcard[aria-pressed=true]{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink);background:var(--soft)}
+.sizes button i{display:block;border-radius:50%;background:currentColor}
+.swatches{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:8px}
+.sw{width:30px;height:30px;border-radius:50%;border:1px solid rgba(0,0,0,.18);cursor:pointer;padding:0}
+.sw[aria-pressed=true]{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ink)}
+.sw.custom{position:relative;overflow:hidden;background:conic-gradient(#e74c3c,#f1c40f,#2ecc71,#3498db,#9b59b6,#e74c3c)}
+.sw.custom input{position:absolute;inset:-6px;width:42px;height:42px;opacity:0;cursor:pointer}
+.cur{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--muted)}
+.cur i{width:22px;height:22px;border-radius:2px;border:1px solid rgba(0,0,0,.15)}
+.sel{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:2px;background:var(--bg);font:inherit;color:var(--ink)}
+.tools{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.tools button{border:1.5px solid var(--line);background:var(--panel);border-radius:2px;padding:8px 2px 6px;font:inherit;font-size:12px;color:var(--ink);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+.tools button[aria-pressed=true]{border-color:var(--ink);background:var(--ink);color:var(--on)}
+.duo{display:flex;gap:8px;margin-top:10px}
+.duo .btn{flex:1;font-size:13px}
+.stamps{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:10px}
+.stamps button{border:1.5px solid var(--line);background:#fff;border-radius:2px;padding:3px;cursor:pointer}
+.stamps button[aria-pressed=true]{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.stamps canvas{width:100%;aspect-ratio:1;display:block}
+.layers{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.ly{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto auto;gap:4px;align-items:center;padding:5px 5px 5px 10px;border:1.5px solid var(--line);border-radius:2px;background:var(--panel);cursor:pointer}
+.ly.on{border-color:var(--ink);background:var(--soft)}
+.ly.off b{opacity:.4}
+.ly b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
+.ly small{color:var(--muted);font-size:12px;font-weight:400}
+.ly .btn{padding:5px}
+#stage canvas{touch-action:none;cursor:crosshair}
+#stage canvas.transp{background:conic-gradient(#e9e8e1 25%,#fff 0 50%,#e9e8e1 0 75%,#fff 0) 0 0/16px 16px}
+#stage.move canvas{cursor:move}
+.rec[aria-pressed=true]{background:var(--ink)!important;color:var(--on)!important;border-color:var(--ink)!important;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:.55}}
+.films{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
+.fc-th{aspect-ratio:auto;padding:8px}
+.fc-th canvas{width:100%;height:auto}
+.viewer:fullscreen{height:100vh;border-radius:0}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a href="../index.html" class="home" title="Retour à la boîte à outils"><svg class="ic" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg><span class="logo" data-logo="contour"></span></a>
+  <div class="sep"></div>
+  <div>
+    <h1>Le <em>gribouilleur</em></h1>
+    <p>Dessine à main levée : tes traits tremblent en boucle, façon dessin animé</p>
+  </div>
+  <button class="btn" id="helpBtn" data-ic="info"><span>Comment ça marche ?</span></button>
+</header>
+
+<div class="app">
+<aside class="panel">
+
+  <section class="step">
+    <div class="step-h"><span class="num">1</span><h2>Le pinceau</h2></div>
+    <div class="brushes" id="brushes"></div>
+    <div class="lbl">Épaisseur<span class="tip" tabindex="0" data-tip="La grosseur du trait. Raccourcis clavier : touches 1 à 4.">?</span></div>
+    <div class="seg sizes" data-name="size">
+      <button data-v="0" aria-pressed="false"><i style="width:4px;height:4px"></i>Fin</button>
+      <button data-v="1" aria-pressed="true"><i style="width:7px;height:7px"></i>Moyen</button>
+      <button data-v="2" aria-pressed="false"><i style="width:11px;height:11px"></i>Gros</button>
+      <button data-v="3" aria-pressed="false"><i style="width:16px;height:16px"></i>Énorme</button>
+    </div>
+    <div class="lbl">Couleurs<span class="tip" tabindex="0" data-tip="Choisis une palette de 8 couleurs, puis une couleur. Le rond arc-en-ciel ouvre le nuancier pour une couleur sur mesure.">?</span></div>
+    <select class="sel" id="palette" aria-label="Palette"></select>
+    <div class="swatches" id="swatches"></div>
+    <div class="cur"><i id="curSw"></i><span id="curTxt"></span></div>
+  </section>
+
+  <section class="step">
+    <div class="step-h"><span class="num">2</span><h2>Les outils</h2></div>
+    <div class="tools" id="tools">
+      <button data-v="draw" aria-pressed="true" data-ic="pen">Dessiner</button>
+      <button data-v="erase" aria-pressed="false" data-ic="erase">Gommer</button>
+      <button data-v="stamp" aria-pressed="false" data-ic="stamp">Tampon</button>
+      <button data-v="move" aria-pressed="false" data-ic="move">Déplacer</button>
+      <button data-v="pick" aria-pressed="false" data-ic="pick">Pipette</button>
+    </div>
+    <div id="stampBox" class="hide">
+      <div class="stamps" id="stamps"></div>
+      <div class="range">
+        <div class="range-h"><span>Taille du tampon</span><output for="stampSize"></output></div>
+        <input type="range" id="stampSize" min="40" max="500" value="160">
+      </div>
+      <p class="hint">Clique sur le dessin pour poser le tampon. Il prend le pinceau, l'épaisseur et la couleur choisis, et tremble comme le reste.</p>
+    </div>
+    <p class="hint" id="toolHint"></p>
+    <div class="row">
+      <span><b>Miroir</b><span class="tip" tabindex="0" data-tip="Chaque trait est recopié en symétrie, de l'autre côté de l'axe vertical du dessin. Pratique pour un visage, un vase, un logo.">?</span></span>
+      <input type="checkbox" class="switch" id="mirror">
+    </div>
+    <div class="duo">
+      <button class="btn" id="flipH" data-ic="flipH" title="Retourne le calque actif de gauche à droite">Retourner ↔</button>
+      <button class="btn" id="flipV" data-ic="flipV" title="Retourne le calque actif de haut en bas">Retourner ↕</button>
+    </div>
+    <div class="duo">
+      <button class="btn" id="clear" data-ic="bomb">Tout effacer</button>
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-h"><span class="num">3</span><h2>Les calques</h2></div>
+    <div class="layers" id="layers"></div>
+    <div class="duo" style="margin-top:0">
+      <button class="btn" id="addLayer" data-ic="plus">Nouveau calque</button>
+      <button class="btn" id="imgBtn" data-ic="image">Importer une image</button>
+    </div>
+    <input type="file" id="imgFile" accept="image/*" hidden>
+    <p class="hint">On dessine sur le calque surligné. Une image importée sert de modèle à décalquer : elle ne tremble pas.</p>
+  </section>
+
+  <section class="step">
+    <div class="step-h"><span class="num">4</span><h2>Le mouvement</h2></div>
+    <div class="range" style="margin-top:0">
+      <div class="range-h"><span>Tremblement<span class="tip" tabindex="0" data-tip="De combien de pixels les traits bougent d'une image à l'autre. 0 = dessin fixe.">?</span></span><output for="amp"></output></div>
+      <input type="range" id="amp" min="0" max="8" step=".5" value="2.5">
+    </div>
+    <div class="range">
+      <div class="range-h"><span>Vitesse<span class="tip" tabindex="0" data-tip="Combien d'images défilent par seconde. 8 donne un tremblement vivant mais calme, 14 une vraie bougeotte.">?</span></span><output for="fps"></output></div>
+      <input type="range" id="fps" min="2" max="16" value="8">
+    </div>
+    <div class="range">
+      <div class="range-h"><span>Durée d'une image<span class="tip" tabindex="0" data-tip="Seulement si tu as plusieurs images (bandeau sous le dessin) : combien de tremblements chaque image reste affichée avant de passer à la suivante.">?</span></span><output for="hold"></output></div>
+      <input type="range" id="hold" min="1" max="8" value="2">
+    </div>
+    <div class="lbl">Format</div>
+    <div class="seg" data-name="format">
+      <button data-v="800x800" aria-pressed="true">Carré<small>800 × 800</small></button>
+      <button data-v="720x900" aria-pressed="false">Portrait<small>720 × 900</small></button>
+      <button data-v="960x600" aria-pressed="false">Paysage<small>960 × 600</small></button>
+    </div>
+    <div class="row">
+      <span><b>Fond</b><span class="tip" tabindex="0" data-tip="La couleur derrière le dessin. Pour un marquage textile, coche « transparent » : seul le dessin sera exporté.">?</span></span>
+      <input type="color" id="bg" value="#ffffff" aria-label="Couleur du fond" style="width:46px;height:30px;border:1px solid var(--line);border-radius:8px;padding:0 2px;background:#fff">
+    </div>
+    <div class="row">
+      <span>Fond transparent</span>
+      <input type="checkbox" class="switch" id="transp">
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-h"><span class="num">5</span><h2>L'export</h2></div>
+    <div class="seg" data-name="fmt">
+      <button data-v="gif" aria-pressed="true">GIF<small>animé</small></button>
+      <button data-v="png" aria-pressed="false">PNG<small>image fixe</small></button>
+      <button data-v="zip" aria-pressed="false">Suite<small>PNG en .zip</small></button>
+      <button data-v="webm" aria-pressed="false">Vidéo<small>WebM</small></button>
+    </div>
+    <div class="lbl">Taille</div>
+    <div class="seg" data-name="scale">
+      <button data-v="1" aria-pressed="true">× 1<small id="s1"></small></button>
+      <button data-v="2" aria-pressed="false">× 2<small id="s2"></small></button>
+      <button data-v="3" aria-pressed="false">× 3<small id="s3"></small></button>
+    </div>
+    <p class="hint" id="fmtHint"></p>
+    <div class="duo">
+      <button class="btn" id="saveProj" data-ic="save" title="Enregistre le dessin modifiable (fichier .gribouille)">Enregistrer le projet</button>
+      <button class="btn" id="openProj" data-ic="folder">Ouvrir</button>
+    </div>
+    <input type="file" id="projFile" accept=".gribouille,.json,application/json" hidden>
+    <div class="run-wrap"><button class="btn primary big" id="export" data-ic="download">Exporter</button></div>
+  </section>
+</aside>
+
+<main class="work">
+  <div class="toolbar">
+    <div class="zoom">
+      <button id="undo" aria-label="Annuler (Cmd+Z)" title="Annuler (Cmd+Z)" data-ic="undo"></button>
+      <button id="redo" aria-label="Rétablir (Cmd+Maj+Z)" title="Rétablir (Cmd+Maj+Z)" data-ic="redo"></button>
+    </div>
+    <button class="btn rec" id="rec" aria-pressed="false" data-ic="rec" title="Filme ton écran de dessin pendant que tu dessines (vidéo WebM)">Filmer le dessin</button>
+    <button class="btn" id="full" data-ic="full" style="margin-left:auto">Plein écran</button>
+  </div>
+
+  <div class="viewer" id="viewer">
+    <div id="stage"><canvas id="cv"></canvas></div>
+    <div class="viewer-hint" id="viewerHint">Dessine directement ici · Cmd+Z : annuler</div>
+    <div class="busy hide" id="busy"><div class="spin"></div><span id="busyTxt">Calcul…</span></div>
+  </div>
+
+  <div class="films-h">
+    <h3>Les images</h3>
+    <span class="meta" id="framesMeta"></span>
+    <div class="exp">
+      <button class="btn" id="play" data-ic="play" aria-pressed="false">Lire</button>
+      <button class="btn" id="onion" data-ic="onion" aria-pressed="true" title="Montre en transparence l'image précédente pour caler la suivante">Pelure d'oignon</button>
+      <button class="btn" id="newFrame" data-ic="plus">Nouvelle</button>
+      <button class="btn" id="dupFrame" data-ic="copy">Dupliquer</button>
+      <button class="btn" id="delFrame" data-ic="trash">Supprimer</button>
+    </div>
+  </div>
+  <div class="films" id="frames"></div>
+  <p class="hint">Une seule image suffit pour un dessin qui tremble. Ajoute des images pour une vraie petite animation (un personnage qui marche, un logo qui apparaît…).</p>
+</main>
+</div>
+
+<div class="modal hide" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="modal-box">
+    <button class="btn icon close" id="helpClose" aria-label="Fermer" data-ic="x"></button>
+    <h2 id="helpTitle">Le petit lexique du gribouilleur</h2>
+    <p>Les mots de l'outil, en une phrase chacun.</p>
+    <div class="gloss">
+      <div><b data-ic="pen">Trait qui tremble</b>Chaque trait est redessiné 3 fois, chaque fois un peu décalé, et les 3 versions défilent en boucle. C'est l'effet « <em>boiling line</em> » des dessins animés faits main.</div>
+      <div><b data-ic="copy">Image</b>Une étape de l'animation. Avec plusieurs images qui se suivent, ton dessin bouge vraiment, comme un folioscope (un petit livre qu'on feuillette).</div>
+      <div><b data-ic="onion">Pelure d'oignon</b>L'image précédente affichée en transparence, pour dessiner la suivante juste au bon endroit.</div>
+      <div><b data-ic="layers">Calque</b>Une feuille transparente posée sur les autres. Par exemple le décor dessous, le personnage dessus : on gomme l'un sans abîmer l'autre.</div>
+      <div><b data-ic="stamp">Tampon</b>Un petit dessin tout prêt (t-shirt, bouton, cintre…) posé d'un clic, avec ton pinceau et ta couleur.</div>
+      <div><b data-ic="pick">Pipette</b>Clique sur une couleur du dessin pour la reprendre comme couleur de pinceau.</div>
+      <div><b data-ic="flipH">Miroir</b>Ce que tu dessines d'un côté est recopié en symétrie de l'autre côté.</div>
+      <div><b data-ic="image">GIF</b>Une image animée qui tourne en boucle, lue partout : messageries, sites, réseaux. Limitée à 256 couleurs.</div>
+      <div><b data-ic="image">PNG</b>Une image fixe de bonne qualité, qui peut garder un fond transparent.</div>
+      <div><b data-ic="rec">WebM</b>Un format vidéo léger. Pour Instagram, on peut le convertir en MP4 avec un convertisseur en ligne.</div>
+      <div><b data-ic="save">Projet .gribouille</b>Le dessin enregistré tel quel, encore modifiable : on le rouvre plus tard avec « Ouvrir ».</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+// ============ Petits outils ============
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const TAU = Math.PI * 2;
+const tick = () => new Promise(r => setTimeout(r, 30));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let toastT; function toast(t){ const e=$('#toast'); e.textContent=t; e.classList.add('on'); clearTimeout(toastT); toastT=setTimeout(()=>e.classList.remove('on'),4200); }
+function rng(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const mk = (w, h=w) => Object.assign(document.createElement('canvas'), {width:Math.round(w), height:Math.round(h)});
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const newSeed = () => Math.random()*1e9|0;
+function save(blob, name){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+function busy(on, t){ $('#busy').classList.toggle('hide', !on); if (t) $('#busyTxt').textContent = t; }
+
+// ============ Pictos ============
+const IC = {
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>', x:'<path d="M6 6l12 12M18 6 6 18"/>',
+  layers:'<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  download:'<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 17v1.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V17"/>',
+  image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
+  pen:'<path d="M4 20l1.5-5L16 4.5a2.1 2.1 0 0 1 3 3L8.5 18z"/><path d="M14 6.5l3 3"/>',
+  erase:'<path d="m4 16 8-8 6 6-5 5H8z"/><path d="M13 19h7"/>',
+  stamp:'<path d="M9 4h6v5l-1 3h4a2 2 0 0 1 2 2v2H4v-2a2 2 0 0 1 2-2h4L9 9z"/><path d="M5 20h14"/>',
+  move:'<path d="M12 3v18M3 12h18M12 3 9.5 5.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/>',
+  pick:'<path d="M14.5 5.5l4 4M17 3l4 4-3 3-4-4z"/><path d="M14 8 5 17v2.5h2.5l9-9"/>',
+  flipH:'<path d="M12 3v18"/><path d="M8 7 3 12l5 5zM16 7l5 5-5 5z"/>',
+  flipV:'<path d="M3 12h18"/><path d="M7 8l5-5 5 5zM7 16l5 5 5-5z"/>',
+  bomb:'<circle cx="11" cy="14" r="6.5"/><path d="m15.5 9.5 2-2M17 5l1-1.5M19.5 7.5 21 7M18.8 4.8l.7-.7"/>',
+  undo:'<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+  redo:'<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>',
+  play:'<path d="M7 4.5v15l12-7.5z"/>', pause:'<path d="M8 5v14M16 5v14"/>',
+  onion:'<rect x="3" y="7" width="12" height="12" rx="2" stroke-dasharray="2 2"/><rect x="9" y="4" width="12" height="12" rx="2"/>',
+  rec:'<circle cx="12" cy="12" r="6" fill="currentColor"/>',
+  full:'<path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/>',
+  copy:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
+  trash:'<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/>',
+  eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  eyeoff:'<path d="M3 3l18 18M10.6 6A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-2.6 3.4M6.3 7.6C3.9 9.3 2.5 12 2.5 12S6 18.5 12 18.5c1.6 0 3-.4 4.2-1.1"/>',
+  up:'<path d="m6 15 6-6 6 6"/>', down:'<path d="m6 9 6 6 6-6"/>',
+  save:'<path d="M5 4h11l3 3v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>',
+  folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+};
+const ic = n => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${IC[n]}</svg>`;
+$$('[data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', ic(el.dataset.ic)));
+
+// ============ Le document ============
+// Un trait = { f: image, b: pinceau, c: couleur, s: épaisseur, p: [x,y,w, x,y,w…], seed }. Tout est vectoriel :
+// on peut le redessiner à n'importe quelle taille et avec un autre tremblement.
+const doc = { W:800, H:800, bg:'#ffffff', transp:false, amp:2.5, fps:8, hold:2, frames:1,
+  layers:[{ name:'Calque 1', on:true, strokes:[] }] };
+let F = 0, act = 0, K = 0;   // image affichée, calque actif, tremblement en cours (0, 1 ou 2)
+const BOIL = 3;               // nombre de versions décalées de chaque trait
+const SIZES = [3, 7, 14, 26];
+const UI = { brush:'crayon', size:1, color:'#31412F', tool:'draw', stamp:'tshirt', play:false, onion:true };
+
+// ============ Le tremblement ============
+// Chaque trait reçoit, pour chacune des 3 images, un petit champ de déformation lisse (des sinus aux phases tirées au hasard).
+function wiggle(st, k){
+  const r = rng(st.seed*3 + k + 1), A = doc.amp, p = st.p, out = [];
+  const a1 = r()*TAU, a2 = r()*TAU, a3 = r()*TAU, a4 = r()*TAU, f1 = .02+r()*.02, f2 = .02+r()*.02, f3 = .03+r()*.03, f4 = .03+r()*.03;
+  const ox = (r()-.5)*A*.6, oy = (r()-.5)*A*.6;
+  for (let i=0; i<p.length; i+=3){
+    const x = p[i], y = p[i+1];
+    out.push({ x: x + ox + A*(.7*Math.sin(x*f1 + y*f2 + a1) + .3*Math.sin(y*f3 - x*f4 + a2)),
+               y: y + oy + A*(.7*Math.sin(y*f1 - x*f2 + a3) + .3*Math.sin(x*f3 + y*f4 + a4)), w: p[i+2] });
+  }
+  return out;
+}
+function resample(pts, step){
+  if (pts.length < 2) return pts.slice();
+  const out = [pts[0]]; let left = step;
+  for (let i=1; i<pts.length; i++){
+    const a = pts[i-1], b = pts[i], d = Math.hypot(b.x-a.x, b.y-a.y); let t = 0;
+    while (d - t >= left){ t += left; left = step; const u = t/d; out.push({x:a.x+(b.x-a.x)*u, y:a.y+(b.y-a.y)*u, w:a.w+(b.w-a.w)*u}); }
+    left -= d - t;
+  }
+  return out;
+}
+function path(x, p){
+  x.beginPath(); x.moveTo(p[0].x, p[0].y);
+  if (p.length < 2){ x.lineTo(p[0].x+.01, p[0].y); return; }
+  for (let i=1; i<p.length-1; i++) x.quadraticCurveTo(p[i].x, p[i].y, (p[i].x+p[i+1].x)/2, (p[i].y+p[i+1].y)/2);
+  x.lineTo(p[p.length-1].x, p[p.length-1].y);
+}
+const line = (x, p, w) => { x.lineWidth = w; path(x, p); x.stroke(); };
+
+// ============ Les pinceaux (dessinés par le code) ============
+const BRUSHES = {
+  crayon:   { name:'Crayon', draw:(x,p,s) => { x.globalAlpha = .9; line(x, p, Math.max(1, s*.45)); x.globalAlpha = .35; x.translate(.7,.5); line(x, p, Math.max(.8, s*.3)); } },
+  stylo:    { name:'Stylo', draw:(x,p,s) => { for (let i=1; i<p.length; i++){ x.lineWidth = s*(.25+.9*p[i].w); x.beginPath(); x.moveTo(p[i-1].x,p[i-1].y); x.lineTo(p[i].x,p[i].y); x.stroke(); } if (p.length < 2) line(x, p, s*.8); } },
+  feutre:   { name:'Feutre', draw:(x,p,s) => line(x, p, s*1.3) },
+  pate:     { name:'Pâté', draw:(x,p,s,r) => { for (const q of resample(p, s*.45)){ x.beginPath(); x.arc(q.x, q.y, s*(.55+.45*r()), 0, TAU); x.fill(); } } },
+  points:   { name:'Pointillé', draw:(x,p,s,r) => { const d = Math.max(.8, s*.13); for (const q of resample(p, Math.max(1.5, s*.35))) for (let j=0;j<2;j++){ const a = r()*TAU, m = r()*s*.9; x.beginPath(); x.arc(q.x+Math.cos(a)*m, q.y+Math.sin(a)*m, d, 0, TAU); x.fill(); } } },
+  spray:    { name:'Bombe', draw:(x,p,s,r) => { const d = Math.max(.6, s*.05); x.globalAlpha = .75; for (const q of resample(p, Math.max(1.5, s*.3))) for (let j=0;j<6;j++){ const a = r()*TAU, m = (r()+r())*.5*s*1.6; x.fillRect(q.x+Math.cos(a)*m, q.y+Math.sin(a)*m, d*2, d*2); } } },
+  couture:  { name:'Couture', draw:(x,p,s) => { x.setLineDash([s*1.4+2, s*1.1+2]); line(x, p, Math.max(1.5, s*.4)); } },
+  plume:    { name:'Plume', draw:(x,p,s) => { const n = Math.max(1, s*.9), st = Math.max(.7, s/12); for (let t=-n; t<=n; t+=st){ x.save(); x.translate(t*.7, -t*.7); line(x, p, 1.2); x.restore(); } } },
+  gomme:    { name:'Gomme', draw:(x,p,s) => line(x, p, s*1.8) },
+};
+
+function drawStroke(x, st, k){
+  const p = wiggle(st, k), r = rng(st.seed*7 + k*131 + 5);
+  const one = q => { x.save(); x.strokeStyle = x.fillStyle = st.c; x.lineCap = x.lineJoin = 'round';
+    if (st.b === 'gomme') x.globalCompositeOperation = 'destination-out';
+    BRUSHES[st.b].draw(x, q, st.s, r); x.restore(); };
+  one(p);
+  if (st.m) one(p.map(q => ({...q, x: doc.W - q.x})));   // miroir en direct pendant le tracé
+}
+
+// ============ Images (calques importés) ============
+const imgs = new Map();
+function imgOf(L){
+  if (!L.img) return null;
+  let im = imgs.get(L.img);
+  if (!im){ im = new Image(); im.onload = () => { cache.clear(); thumbsSoon(); }; im.src = L.img; imgs.set(L.img, im); }
+  return im.complete && im.naturalWidth ? im : null;
+}
+
+// ============ Rendu ============
+const lc = mk(1);
+function renderFrame(f, k, scale, withBg){
+  const c = mk(doc.W*scale, doc.H*scale), x = c.getContext('2d');
+  if (withBg && !doc.transp){ x.fillStyle = doc.bg; x.fillRect(0, 0, c.width, c.height); }
+  lc.width = c.width; lc.height = c.height; const lx = lc.getContext('2d');
+  for (const L of doc.layers){
+    if (!L.on) continue;
+    lx.setTransform(1,0,0,1,0,0); lx.clearRect(0, 0, lc.width, lc.height); lx.setTransform(scale,0,0,scale,0,0);
+    const im = imgOf(L); if (im) lx.drawImage(im, L.x, L.y, L.w, L.h);
+    for (const st of L.strokes) if (st.f === f) drawStroke(lx, st, k);
+    x.drawImage(lc, 0, 0);
+  }
+  return c;
+}
+const cache = new Map();
+const dpr = Math.min(2, window.devicePixelRatio || 1);
+const frame = (f, k) => { const key = f+':'+k; let c = cache.get(key); if (!c){ c = renderFrame(f, k, dpr, false); cache.set(key, c); } return c; };
+const dirty = f => { for (let k=0;k<BOIL;k++) cache.delete(f+':'+k); need = true; thumbsSoon(); };
+const dirtyAll = () => { cache.clear(); need = true; thumbsSoon(); };
+
+const cv = $('#cv'), cx = cv.getContext('2d');
+function sizeCanvas(){
+  cv.width = doc.W*dpr; cv.height = doc.H*dpr;
+  const v = $('#viewer'), z = Math.min((v.clientWidth-48)/doc.W, (v.clientHeight-48)/doc.H, 1.4);
+  cv.style.width = doc.W*z + 'px'; cv.style.height = doc.H*z + 'px';
+  cv.classList.toggle('transp', doc.transp); need = true;
+}
+let need = true;
+function show(){
+  cx.clearRect(0, 0, cv.width, cv.height);
+  if (!doc.transp){ cx.fillStyle = doc.bg; cx.fillRect(0, 0, cv.width, cv.height); }
+  if (UI.onion && !UI.play && doc.frames > 1){ cx.globalAlpha = .28; cx.drawImage(frame((F-1+doc.frames)%doc.frames, K), 0, 0); cx.globalAlpha = 1; }
+  cx.drawImage(frame(F, K), 0, 0);
+}
+(function loop(){ if (need){ need = false; show(); } requestAnimationFrame(loop); })();
+let hc = 0;
+(function boil(){
+  K = (K+1) % BOIL;
+  if (UI.play && doc.frames > 1 && ++hc >= doc.hold){ hc = 0; F = (F+1) % doc.frames; markFrames(); }
+  need = true; brushPreviews();
+  setTimeout(boil, 1000/doc.fps);
+})();
+
+// ============ Historique (annuler / rétablir) ============
+// Les traits ne sont jamais modifiés sur place (on les remplace), donc une copie des listes suffit.
+const hist = [], redo = [];
+const snap = () => ({ frames:doc.frames, F, act, layers: doc.layers.map(L => ({...L, strokes: L.strokes.slice()})) });
+function restore(s){ doc.frames = s.frames; doc.layers = s.layers.map(L => ({...L, strokes: L.strokes.slice()})); F = Math.min(s.F, doc.frames-1); act = Math.min(s.act, doc.layers.length-1); refresh(); }
+function push(){ hist.push(snap()); if (hist.length > 80) hist.shift(); redo.length = 0; undoUI(); }
+function undo(){ if (!hist.length) return; redo.push(snap()); restore(hist.pop()); undoUI(); }
+function redoIt(){ if (!redo.length) return; hist.push(snap()); restore(redo.pop()); undoUI(); }
+function undoUI(){ $('#undo').disabled = !hist.length; $('#redo').disabled = !redo.length; }
+$('#undo').onclick = undo; $('#redo').onclick = redoIt;
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input[type=text],input[type=search],textarea')) return;
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z'){ e.preventDefault(); e.shiftKey ? redoIt() : undo(); }
+  else if (!e.metaKey && !e.ctrlKey && '1234'.includes(e.key) && e.key.length === 1) setSeg('size', String(+e.key-1));
+  if (e.key === 'Escape') $('#help').classList.add('hide');
+});
+function refresh(){ sizeCanvas(); dirtyAll(); renderLayers(); renderFrames(); }
+
+// ============ 1. Pinceau, épaisseur, couleurs ============
+const bp = {};
+$('#brushes').innerHTML = Object.entries(BRUSHES).filter(([id]) => id !== 'gomme').map(([id, b]) =>
+  `<button class="bcard" data-id="${id}" aria-pressed="${id === UI.brush}"><canvas width="120" height="80"></canvas>${b.name}</button>`).join('');
+const sample = { f:0, c:'#31412F', s:7, seed:42, p:[] };
+for (let i=0; i<=30; i++){ const t = i/30; sample.p.push(14+t*92, 40+Math.sin(t*TAU*1.1)*18, .3+.7*Math.sin(t*Math.PI)); }
+function brushPreviews(){
+  $$('.bcard').forEach(b => { const c = b.querySelector('canvas'), x = c.getContext('2d'); x.clearRect(0, 0, c.width, c.height);
+    const amp = doc.amp; doc.amp = Math.max(amp, 1); drawStroke(x, {...sample, b:b.dataset.id, c:b.getAttribute('aria-pressed') === 'true' ? UI.color : '#000'}, K); doc.amp = amp; });
+}
+$('#brushes').onclick = e => { const b = e.target.closest('.bcard'); if (!b) return; UI.brush = b.dataset.id;
+  $$('.bcard').forEach(x => x.setAttribute('aria-pressed', x === b)); if (UI.tool === 'erase' || UI.tool === 'pick' || UI.tool === 'move') setTool('draw'); };
+
+const seg = name => $(`.seg[data-name="${name}"] [aria-pressed="true"]`).dataset.v;
+function setSeg(name, v){ $$(`.seg[data-name="${name}"] button`).forEach(x => x.setAttribute('aria-pressed', x.dataset.v === v)); segChange(name); }
+$$('.seg').forEach(g => g.addEventListener('click', e => { const b = e.target.closest('button'); if (b) setSeg(g.dataset.name, b.dataset.v); }));
+function segChange(name){
+  if (name === 'size') UI.size = +seg('size');
+  if (name === 'format'){ const [w, h] = seg('format').split('x').map(Number); if (w !== doc.W || h !== doc.H){ push(); doc.W = w; doc.H = h; refresh(); } scaleUI(); }
+  if (name === 'fmt' || name === 'scale') fmtUI();
+}
+
+// Palettes maison (8 couleurs chacune)
+const PALETTES = {
+  'Atelier Coton':      ['#31412F','#F4E04D','#ACBC9B','#A38A2D','#F5F4EE','#d2421f','#22301f','#ffffff'],
+  'Encres sérigraphie': ['#111111','#ffffff','#e2231a','#0057b8','#ffd100','#00a651','#ff7f00','#e5007e'],
+  'Fils de broderie':   ['#2b2b2b','#f3efe6','#b5482f','#c9a227','#4a6b8a','#6b8e4e','#8c5a3c','#d98fa0'],
+  'Pastel':             ['#3d3a4b','#fdfbf7','#f7c5cc','#ffe7a3','#b8e0d2','#a9c7f0','#d6c1f0','#f8b88b'],
+  'Nuit':               ['#0e1428','#f0f3ff','#ff5e5b','#ffed66','#00cecb','#7b61ff','#ff9f1c','#2ec4b6'],
+  'Noir & blanc':       ['#000000','#ffffff','#333333','#666666','#999999','#cccccc','#1a1a1a','#e6e6e6'],
+};
+$('#palette').innerHTML = Object.keys(PALETTES).map(n => `<option>${esc(n)}</option>`).join('');
+function renderSwatches(){
+  const cols = PALETTES[$('#palette').value];
+  $('#swatches').innerHTML = cols.map(c => `<button class="sw" style="background:${c}" data-c="${c}" aria-label="Couleur ${c}" aria-pressed="${c.toLowerCase() === UI.color.toLowerCase()}"></button>`).join('')
+    + `<label class="sw custom" title="Couleur sur mesure"><input type="color" id="custom" value="${UI.color}" aria-label="Couleur sur mesure"></label>`;
+  $('#custom').oninput = e => setColor(e.target.value);
+}
+function setColor(c){ UI.color = c; $$('.sw[data-c]').forEach(b => b.setAttribute('aria-pressed', b.dataset.c.toLowerCase() === c.toLowerCase()));
+  $('#curSw').style.background = c; $('#curTxt').textContent = 'Couleur : ' + c.toUpperCase(); if (UI.tool === 'erase' || UI.tool === 'pick') setTool('draw'); }
+$('#palette').onchange = () => { renderSwatches(); setColor(PALETTES[$('#palette').value][0]); };
+$('#swatches').onclick = e => { const b = e.target.closest('.sw[data-c]'); if (b) setColor(b.dataset.c); };
+
+// ============ 2. Outils ============
+const HINTS = { draw:'Dessine à la souris, au doigt ou au stylet. Avec un stylet, la pression change l\'épaisseur du pinceau « Stylo ».',
+  erase:'La gomme tremble elle aussi. Elle n\'efface que le calque surligné, sur l\'image en cours.',
+  stamp:'', move:'Fais glisser pour déplacer tout le contenu du calque surligné sur l\'image en cours.',
+  pick:'Clique sur le dessin pour reprendre une couleur.' };
+function setTool(t){ UI.tool = t; $$('#tools button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === t));
+  $('#stampBox').classList.toggle('hide', t !== 'stamp'); $('#toolHint').textContent = HINTS[t]; $('#stage').classList.toggle('move', t === 'move'); }
+$('#tools').onclick = e => { const b = e.target.closest('button'); if (b) setTool(b.dataset.v); };
+
+// Tampons maison : des tracés en coordonnées -0.5..0.5, qui deviennent de vrais traits (donc ils tremblent).
+const circ = (cx, cy, r, a0=0, a1=TAU, n=28) => Array.from({length:n+1}, (_, i) => { const a = a0+(a1-a0)*i/n; return [cx+Math.cos(a)*r, cy+Math.sin(a)*r]; });
+const bez = (a, c, b, n=24) => Array.from({length:n+1}, (_, i) => { const t = i/n, u = 1-t; return [u*u*a[0]+2*u*t*c[0]+t*t*b[0], u*u*a[1]+2*u*t*c[1]+t*t*b[1]]; });
+const STAMPS = {
+  tshirt:   { name:'T-shirt', d:[[[.17,-.42],[.5,-.24],[.38,0],[.28,-.07],[.28,.45],[-.28,.45],[-.28,-.07],[-.38,0],[-.5,-.24],[-.17,-.42], ...circ(0,-.42,.17,Math.PI,0,12)]] },
+  tote:     { name:'Tote bag', d:[[[-.38,-.1],[.38,-.1],[.43,.46],[-.43,.46],[-.38,-.1]], circ(0,-.1,.2,Math.PI,TAU,14)] },
+  cintre:   { name:'Cintre', d:[[[0,-.12],[-.48,.3],[.48,.3],[0,-.12]], [[0,-.12], ...circ(0,-.31,.09,Math.PI/2,Math.PI/2-Math.PI*1.4,14)]] },
+  bouton:   { name:'Bouton', d:[circ(0,0,.45), circ(0,0,.36,0,TAU,24), ...[[-1,-1],[1,-1],[-1,1],[1,1]].map(([a,b]) => circ(a*.11,b*.11,.05,0,TAU,10))] },
+  bobine:   { name:'Bobine', d:[[[-.32,-.46],[.32,-.46],[.32,-.34],[-.32,-.34],[-.32,-.46]], [[-.32,.34],[.32,.34],[.32,.46],[-.32,.46],[-.32,.34]],
+              ...[-.26,-.17,-.08,.01,.1,.19,.28].map(y => [[-.24,y],[.24,y-.03]]), [[.24,.2],[.38,.26],[.33,.4],[.48,.48]]] },
+  aiguille: { name:'Aiguille', d:[[[-.42,.42],[.27,-.25],[.33,-.37],[.22,-.31],[-.42,.42]], circ(.27,-.3,.025,0,TAU,8),
+              Array.from({length:30}, (_, i) => { const t = i/29; return [.29-t*.7, -.31+Math.sin(t*TAU*1.2)*.16+t*.62]; })] },
+  etiquette:{ name:'Étiquette', d:[[[-.45,-.25],[.22,-.25],[.45,0],[.22,.25],[-.45,.25],[-.45,-.25]], circ(.24,0,.06,0,TAU,12), [[-.33,-.08],[.05,-.08]], [[-.33,.08],[-.05,.08]]] },
+  coeur:    { name:'Cœur', d:[Array.from({length:41}, (_, i) => { const t = i/40*TAU; return [16*Math.sin(t)**3/34, -(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t))/34+.03]; })] },
+  etoile:   { name:'Étoile', d:[Array.from({length:11}, (_, i) => { const a = -Math.PI/2 + i*Math.PI/5, r = i%2 ? .2 : .48; return [Math.cos(a)*r, Math.sin(a)*r+.04]; })] },
+  feuille:  { name:'Feuille', d:[bez([-.4,.35],[.35,.35],[.4,-.35]), bez([-.4,.35],[-.35,-.35],[.4,-.35]), [[-.48,.45],[.3,-.25]], [[-.1,.05],[.05,.13]], [[0,-.05],[-.02,-.2]], [[.12,-.1],[.25,-.03]]] },
+};
+$('#stamps').innerHTML = Object.entries(STAMPS).map(([id, s]) => `<button data-id="${id}" title="${s.name}" aria-label="${s.name}" aria-pressed="${id === UI.stamp}"><canvas width="80" height="80"></canvas></button>`).join('');
+$$('#stamps button').forEach(b => { const x = b.querySelector('canvas').getContext('2d'); x.strokeStyle = '#000'; x.lineWidth = 3; x.lineCap = x.lineJoin = 'round';
+  for (const l of STAMPS[b.dataset.id].d){ x.beginPath(); l.forEach(([u, v], i) => x[i ? 'lineTo' : 'moveTo'](40+u*64, 40+v*64)); x.stroke(); } });
+$('#stamps').onclick = e => { const b = e.target.closest('button'); if (!b) return; UI.stamp = b.dataset.id; $$('#stamps button').forEach(x => x.setAttribute('aria-pressed', x === b)); };
+$('#stampSize').oninput = e => $('output[for=stampSize]').textContent = e.target.value + ' px';
+$('#stampSize').oninput({target:$('#stampSize')});
+function placeStamp(px, py){
+  const L = layer(); if (!L) return; push(); const S = +$('#stampSize').value;
+  const mkSt = pts => ({ f:F, b:UI.brush, c:UI.color, s:SIZES[UI.size], seed:newSeed(), p: pts.flatMap(([u, v]) => [px+u*S, py+v*S, .6]) });
+  for (const l of STAMPS[UI.stamp].d){ L.strokes.push(mkSt(l)); if ($('#mirror').checked) L.strokes.push(mkSt(l.map(([u, v]) => [(doc.W-2*px)/S - u, v]))); }
+  dirty(F);
+}
+
+$('#flipH').onclick = () => flip(true); $('#flipV').onclick = () => flip(false);
+function flip(h){
+  const L = doc.layers[act]; push();
+  L.strokes = L.strokes.map(st => st.f !== F ? st : {...st, p: st.p.map((v, i) => i%3 === 0 && h ? doc.W - v : i%3 === 1 && !h ? doc.H - v : v)});
+  if (L.img){ if (h) L.x = doc.W - L.x - L.w; else L.y = doc.H - L.y - L.h; toast('L\'image importée est déplacée, pas retournée.'); }
+  dirtyAll();
+}
+$('#clear').onclick = () => {
+  if (!doc.layers.some(L => L.strokes.some(s => s.f === F))) return toast('Cette image est déjà vide.');
+  push(); doc.layers.forEach(L => L.strokes = L.strokes.filter(s => s.f !== F)); dirty(F); toast('Image effacée. Cmd+Z pour revenir en arrière.');
+};
+
+// ============ Dessin à la souris / au stylet ============
+function layer(){ const L = doc.layers[act]; if (!L.on){ toast('Ce calque est masqué : rends-le visible (œil) pour dessiner dessus.'); return null; } return L; }
+const docPt = e => { const r = cv.getBoundingClientRect(); return [(e.clientX-r.left)*doc.W/r.width, (e.clientY-r.top)*doc.H/r.height]; };
+let cur = null, drag = null, last = null;
+cv.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return; $('#viewerHint').classList.add('hide');
+  const [x, y] = docPt(e);
+  if (UI.tool === 'pick' || e.altKey){ const d = cx.getImageData(x*dpr, y*dpr, 1, 1).data;
+    if (d[3] < 20) return toast('Rien à cet endroit : clique sur un trait.');
+    return setColor('#' + [d[0],d[1],d[2]].map(v => v.toString(16).padStart(2, '0')).join('')); }
+  const L = layer(); if (!L) return;
+  if (UI.tool === 'stamp') return placeStamp(x, y);
+  cv.setPointerCapture(e.pointerId); push();
+  if (UI.tool === 'move'){ drag = { x, y, L, orig: L.strokes, ix: L.x, iy: L.y }; return; }
+  cur = { f:F, b: UI.tool === 'erase' ? 'gomme' : UI.brush, c:UI.color, s:SIZES[UI.size], seed:newSeed(), p:[+x.toFixed(1), +y.toFixed(1), .5] };
+  if ($('#mirror').checked) cur.m = true;
+  L.strokes.push(cur); last = { x, y, t:e.timeStamp, w:.5 }; dirty(F);
+});
+cv.addEventListener('pointermove', e => {
+  if (drag){ const [x, y] = docPt(e), dx = x-drag.x, dy = y-drag.y;
+    drag.L.strokes = drag.orig.map(st => st.f !== F ? st : {...st, p: st.p.map((v, i) => i%3 === 0 ? v+dx : i%3 === 1 ? v+dy : v)});
+    if (drag.L.img){ drag.L.x = drag.ix + dx; drag.L.y = drag.iy + dy; dirtyAll(); } else dirty(F); return; }
+  if (!cur) return;
+  const evs = e.getCoalescedEvents?.();
+  for (const ev of evs?.length ? evs : [e]){
+    const [x, y] = docPt(ev), d = Math.hypot(x-last.x, y-last.y); if (d < 1.5) continue;
+    // Épaisseur : la pression du stylet si elle existe, sinon la vitesse (lent = épais, rapide = fin)
+    let w = ev.pointerType === 'pen' && ev.pressure > 0 ? ev.pressure : Math.max(.15, Math.min(1, 1 - d/Math.max(1, ev.timeStamp-last.t)/2.5));
+    w = last.w*.6 + w*.4; cur.p.push(+x.toFixed(1), +y.toFixed(1), +w.toFixed(2)); last = { x, y, t:ev.timeStamp, w };
+  }
+  dirty(F);
+});
+const end = () => {
+  if (cur?.m){ delete cur.m; const L = doc.layers[act];
+    L.strokes.push({...cur, seed:newSeed(), p: cur.p.map((v, i) => i%3 === 0 ? +(doc.W - v).toFixed(1) : v)}); }
+  if (cur || drag) dirty(F);
+  cur = drag = null;
+};
+cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+
+// ============ 3. Calques ============
+let lid = 2;
+function renderLayers(){
+  $('#layers').innerHTML = doc.layers.map((L, i) => ({L, i})).reverse().map(({L, i}) => `
+    <div class="ly ${i === act ? 'on' : ''} ${L.on ? '' : 'off'}" data-i="${i}">
+      <b>${esc(L.name)} <small>${L.img ? '· image' : ''}</small></b>
+      <button class="btn" data-a="vis" aria-label="${L.on ? 'Masquer' : 'Afficher'}">${ic(L.on ? 'eye' : 'eyeoff')}</button>
+      <button class="btn" data-a="up" aria-label="Monter" ${i === doc.layers.length-1 ? 'disabled' : ''}>${ic('up')}</button>
+      <button class="btn" data-a="down" aria-label="Descendre" ${i === 0 ? 'disabled' : ''}>${ic('down')}</button>
+      <button class="btn" data-a="del" aria-label="Supprimer le calque" ${doc.layers.length < 2 ? 'disabled' : ''}>${ic('trash')}</button>
+    </div>`).join('');
+}
+$('#layers').onclick = e => {
+  const row = e.target.closest('.ly'); if (!row) return; const i = +row.dataset.i, a = e.target.closest('button')?.dataset.a;
+  if (!a){ act = i; return renderLayers(); }
+  push(); const Ls = doc.layers;
+  if (a === 'vis') Ls[i].on = !Ls[i].on;
+  if (a === 'up' || a === 'down'){ const j = a === 'up' ? i+1 : i-1; [Ls[i], Ls[j]] = [Ls[j], Ls[i]]; if (act === i) act = j; else if (act === j) act = i; }
+  if (a === 'del'){ Ls.splice(i, 1); act = Math.max(0, Math.min(act > i ? act-1 : act, Ls.length-1)); toast('Calque supprimé. Cmd+Z pour le récupérer.'); }
+  dirtyAll(); renderLayers();
+};
+$('#addLayer').onclick = () => { push(); doc.layers.splice(act+1, 0, { name:'Calque ' + lid++, on:true, strokes:[] }); act++; renderLayers(); };
+$('#imgBtn').onclick = () => $('#imgFile').click();
+$('#imgFile').onchange = e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  if (!f.type.startsWith('image/')) return toast('Ce fichier n\'est pas une image (PNG, JPG, WebP…).');
+  const im = new Image(); im.onerror = () => toast('Impossible de lire cette image.');
+  im.onload = () => {   // réduite et intégrée au projet (data URL), pour rester exportable même ouverte par double-clic
+    const k = Math.min(1, 1600/Math.max(im.width, im.height)), c = mk(im.width*k, im.height*k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+    const z = Math.min(doc.W/c.width, doc.H/c.height), w = c.width*z, h = c.height*z;
+    push(); doc.layers.splice(act, 0, { name: f.name.replace(/\.[^.]+$/, '').slice(0, 30), on:true, strokes:[], img: c.toDataURL('image/png'), x:(doc.W-w)/2, y:(doc.H-h)/2, w, h });
+    act++; renderLayers(); dirtyAll(); URL.revokeObjectURL(im.src); toast('Image posée sous ton calque : décalque-la, puis masque-la avec l\'œil.');
+  };
+  im.src = URL.createObjectURL(f);
+};
+
+// ============ Images de l'animation ============
+function renderFrames(){
+  $('#frames').innerHTML = Array.from({length:doc.frames}, (_, f) => `
+    <div class="fc ${f === F ? 'active' : ''}" data-f="${f}"><div class="fc-th"><span class="ord">${f+1}</span><canvas width="${Math.round(doc.W/5)}" height="${Math.round(doc.H/5)}"></canvas></div></div>`).join('');
+  $('#framesMeta').textContent = doc.frames === 1 ? '1 image · le dessin tremble sur place' : `${doc.frames} images · boucle de ${(loopLen()/doc.fps).toFixed(1).replace('.', ',')} s`;
+  $('#delFrame').disabled = doc.frames < 2;
+  thumbs();
+}
+function thumbs(){
+  $$('#frames canvas').forEach((c, f) => { const x = c.getContext('2d'); x.clearRect(0, 0, c.width, c.height);
+    if (!doc.transp){ x.fillStyle = doc.bg; x.fillRect(0, 0, c.width, c.height); } x.drawImage(frame(f, 0), 0, 0, c.width, c.height); });
+}
+let thT; function thumbsSoon(){ clearTimeout(thT); thT = setTimeout(thumbs, 400); }
+function markFrames(){ $$('#frames .fc').forEach((c, i) => c.classList.toggle('active', i === F)); }
+$('#frames').onclick = e => { const c = e.target.closest('.fc'); if (!c) return; F = +c.dataset.f; markFrames(); need = true; };
+function shift(from, by){ doc.layers.forEach(L => L.strokes = L.strokes.map(s => s.f >= from ? {...s, f: s.f+by} : s)); }
+$('#newFrame').onclick = () => { push(); shift(F+1, 1); doc.frames++; F++; dirtyAll(); renderFrames(); };
+$('#dupFrame').onclick = () => { push(); shift(F+1, 1); doc.layers.forEach(L => L.strokes = L.strokes.concat(L.strokes.filter(s => s.f === F).map(s => ({...s, f:F+1, seed:newSeed()})))); doc.frames++; F++; dirtyAll(); renderFrames(); };
+$('#delFrame').onclick = () => { if (doc.frames < 2) return; push(); doc.layers.forEach(L => L.strokes = L.strokes.filter(s => s.f !== F)); shift(F+1, -1); doc.frames--; F = Math.min(F, doc.frames-1); dirtyAll(); renderFrames(); toast('Image supprimée. Cmd+Z pour la récupérer.'); };
+$('#play').onclick = () => { UI.play = !UI.play; const b = $('#play'); b.setAttribute('aria-pressed', UI.play); b.innerHTML = ic(UI.play ? 'pause' : 'play') + (UI.play ? 'Pause' : 'Lire'); if (doc.frames < 2 && UI.play) toast('Ajoute au moins une 2e image pour animer (« Nouvelle » ou « Dupliquer »).'); };
+$('#onion').onclick = () => { UI.onion = !UI.onion; $('#onion').setAttribute('aria-pressed', UI.onion); need = true; };
+
+// ============ 4. Mouvement et fond ============
+const FMT = { amp: v => v + ' px', fps: v => v + ' img/s', hold: v => v + (v > 1 ? ' tremblements' : ' tremblement') };
+['amp', 'fps', 'hold'].forEach(id => { const r = $('#'+id);
+  r.oninput = () => { doc[id] = +r.value; $(`output[for=${id}]`).textContent = FMT[id](r.value); if (id === 'amp') dirtyAll(); renderFramesMeta(); };
+  $(`output[for=${id}]`).textContent = FMT[id](r.value); });
+const renderFramesMeta = () => { if (doc.frames > 1) $('#framesMeta').textContent = `${doc.frames} images · boucle de ${(loopLen()/doc.fps).toFixed(1).replace('.', ',')} s`; };
+$('#bg').oninput = e => { doc.bg = e.target.value; need = true; thumbsSoon(); };
+$('#transp').onchange = e => { doc.transp = e.target.checked; sizeCanvas(); thumbsSoon(); fmtUI(); };
+window.addEventListener('resize', sizeCanvas);
+
+// ============ 5. Export ============
+const gcd = (a, b) => b ? gcd(b, a % b) : a;
+const loopLen = () => { const n = doc.frames > 1 ? doc.frames*doc.hold : 1; return n*BOIL/gcd(n, BOIL); };   // boucle sans à-coup
+const seq = () => Array.from({length:loopLen()}, (_, t) => [doc.frames > 1 ? Math.floor(t/doc.hold) % doc.frames : F, t % BOIL]);
+function scaleUI(){ [1,2,3].forEach(s => $('#s'+s).textContent = `${doc.W*s} px`); }
+const FMT_HINT = {
+  gif: () => `Une boucle de ${loopLen()} images, lue partout. ${doc.transp ? 'Fond transparent : les bords des traits seront un peu crénelés (le GIF ne connaît pas la demi-transparence).' : ''}`,
+  png: () => 'L\'image en cours, sans mouvement. ' + (doc.transp ? 'Fond transparent : prête pour un marquage textile.' : 'Coche « fond transparent » pour un fichier d\'impression.'),
+  zip: () => `Les ${loopLen()} images de la boucle en PNG, rangées dans un .zip (pour un logiciel de montage).`,
+  webm: () => 'Une vidéo de quelques secondes. Le fond est toujours plein (pas de transparence en vidéo).',
+};
+function fmtUI(){ $('#fmtHint').textContent = FMT_HINT[seg('fmt')](); }
+const toBlob = c => new Promise(res => c.toBlob(res, 'image/png'));
+const base = 'gribouille';
+const isEmpty = () => !doc.layers.some(L => L.img || L.strokes.length);
+
+$('#export').onclick = async () => {
+  if (isEmpty()) return toast('Le dessin est vide : gribouille d\'abord quelque chose !');
+  const fmt = seg('fmt'), sc = +seg('scale'), W = doc.W*sc, H = doc.H*sc;
+  busy(true, 'Export en cours…'); await tick();
+  try {
+    if (fmt === 'png'){ save(await toBlob(renderFrame(F, 0, sc, true)), `${base}.png`); toast(`PNG téléchargé (${W} × ${H} px).`); }
+    if (fmt === 'gif'){
+      const list = seq(), data = [];
+      for (const [f, k] of list){ data.push(renderFrame(f, k, sc, true).getContext('2d').getImageData(0, 0, W, H)); }
+      busyTxt(`Encodage du GIF (${list.length} images)…`); await tick();
+      const b = encodeGIF(data, W, H, Math.round(100/doc.fps), doc.transp);
+      save(b, `${base}.gif`); toast(`GIF téléchargé : ${list.length} images, ${(b.size/1048576).toFixed(1).replace('.', ',')} Mo.`);
+    }
+    if (fmt === 'zip'){
+      if (!window.JSZip) throw new Error('Le module .zip ne s\'est pas chargé (connexion internet ?).');
+      const z = new JSZip(), list = seq();
+      for (let i=0; i<list.length; i++) z.file(`${base}_${String(i+1).padStart(3, '0')}.png`, await toBlob(renderFrame(list[i][0], list[i][1], sc, true)));
+      save(await z.generateAsync({type:'blob'}), `${base}_images.zip`); toast(`${list.length} images PNG téléchargées dans un .zip.`);
+    }
+    if (fmt === 'webm'){
+      const type = ['video/webm;codecs=vp9', 'video/webm'].find(t => window.MediaRecorder?.isTypeSupported(t));
+      if (!type) throw new Error('Ton navigateur ne sait pas créer de vidéo WebM : essaie Chrome ou Firefox.');
+      const list = seq(), frames = list.map(([f, k]) => renderFrame(f, k, sc, false));
+      const c = mk(W, H), x = c.getContext('2d'), rec = new MediaRecorder(c.captureStream(doc.fps), { mimeType:type, videoBitsPerSecond: 6e6 }), parts = [];
+      const draw = i => { x.fillStyle = doc.bg; x.fillRect(0, 0, W, H); x.drawImage(frames[i % frames.length], 0, 0); };
+      rec.ondataavailable = e => e.data.size && parts.push(e.data);
+      const done = new Promise(r => rec.onstop = r);
+      const n = Math.max(list.length*2, Math.ceil(doc.fps*4));   // au moins 4 s de vidéo
+      busyTxt('Enregistrement de la vidéo…'); draw(0); rec.start();
+      for (let i=0; i<n; i++){ draw(i); await sleep(1000/doc.fps); }
+      rec.stop(); await done;
+      save(new Blob(parts, {type:'video/webm'}), `${base}.webm`); toast('Vidéo WebM téléchargée.');
+    }
+  } catch (err){ console.error(err); toast(err.message?.startsWith('Ton') || err.message?.startsWith('Le module') ? err.message : 'L\'export a échoué : essaie une taille plus petite.'); }
+  busy(false);
+};
+const busyTxt = t => $('#busyTxt').textContent = t;
+
+// Projet modifiable
+$('#saveProj').onclick = () => {
+  save(new Blob([JSON.stringify({ app:'gribouilleur', v:1, doc })], {type:'application/json'}), `${base}.gribouille`);
+  toast('Projet enregistré : rouvre-le plus tard avec « Ouvrir ».');
+};
+$('#openProj').onclick = () => $('#projFile').click();
+$('#projFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const j = JSON.parse(await f.text()), d = j.doc;
+    if (j.app !== 'gribouilleur' || !Array.isArray(d?.layers) || !(d.frames >= 1) || !(d.W > 0 && d.H > 0)) throw 0;
+    push(); Object.assign(doc, d); F = 0; act = doc.layers.length-1;
+    $('#bg').value = doc.bg; $('#transp').checked = doc.transp;
+    ['amp', 'fps', 'hold'].forEach(id => { $('#'+id).value = doc[id]; $('#'+id).oninput(); });
+    $$('.seg[data-name="format"] button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === `${doc.W}x${doc.H}`));
+    refresh(); scaleUI(); fmtUI(); toast('Projet ouvert.');
+  } catch { toast('Ce fichier n\'est pas un projet du gribouilleur.'); }
+};
+
+// Filmer le dessin en direct
+let rec = null;
+$('#rec').onclick = () => {
+  if (rec){ rec.stop(); return; }
+  const type = ['video/webm;codecs=vp9', 'video/webm'].find(t => window.MediaRecorder?.isTypeSupported(t));
+  if (!type) return toast('Ton navigateur ne sait pas filmer en WebM : essaie Chrome ou Firefox.');
+  const parts = []; rec = new MediaRecorder(cv.captureStream(30), { mimeType:type });
+  rec.ondataavailable = e => e.data.size && parts.push(e.data);
+  rec.onstop = () => { save(new Blob(parts, {type:'video/webm'}), `${base}_making-of.webm`); rec = null; $('#rec').setAttribute('aria-pressed', false); $('#rec').lastChild.textContent = 'Filmer le dessin'; toast('Vidéo du dessin téléchargée.'); };
+  rec.start(); $('#rec').setAttribute('aria-pressed', true); $('#rec').lastChild.textContent = 'Arrêter le film'; toast('On filme ! Dessine, puis clique sur « Arrêter le film ».');
+};
+$('#full').onclick = () => document.fullscreenElement ? document.exitFullscreen() : $('#viewer').requestFullscreen?.();
+document.addEventListener('fullscreenchange', () => setTimeout(sizeCanvas, 50));
+
+// ============ Encodeur GIF (fait maison : pas de « worker », marche aussi en double-clic) ============
+function encodeGIF(frames, w, h, delay, transp){
+  // 1. Palette commune : couleurs regroupées par cases de 5 bits, les plus fréquentes et les plus différentes d'abord
+  const N = 32768, cnt = new Float64Array(N), sr = new Float64Array(N), sg = new Float64Array(N), sb = new Float64Array(N);
+  for (const im of frames){ const d = im.data;
+    for (let i=0; i<d.length; i+=4){ if (transp && d[i+3] < 128) continue; const k = (d[i]>>3)<<10 | (d[i+1]>>3)<<5 | d[i+2]>>3; cnt[k]++; sr[k] += d[i]; sg[k] += d[i+1]; sb[k] += d[i+2]; } }
+  const keys = []; for (let k=0; k<N; k++) if (cnt[k]) keys.push(k);
+  keys.sort((a, b) => cnt[b] - cnt[a]);
+  const off = transp ? 1 : 0, max = 256 - off, pal = [], taken = new Uint8Array(N);
+  const rgb = k => [sr[k]/cnt[k], sg[k]/cnt[k], sb[k]/cnt[k]], d2 = (a, b) => (a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2;
+  for (const k of keys){ if (pal.length >= max) break; const c = rgb(k); if (pal.every(p => d2(p, c) > 300)){ pal.push(c); taken[k] = 1; } }
+  for (const k of keys){ if (pal.length >= max) break; if (!taken[k]) pal.push(rgb(k)); }
+  if (!pal.length) pal.push([0, 0, 0]);
+  const map = new Int16Array(N).fill(-1);
+  const near = k => { if (map[k] < 0){ const c = cnt[k] ? rgb(k) : [(k>>10)<<3, ((k>>5)&31)<<3, (k&31)<<3]; let bi = 0, bd = Infinity; pal.forEach((p, i) => { const v = d2(p, c); if (v < bd){ bd = v; bi = i; } }); map[k] = bi + off; } return map[k]; };
+  // 2. Fichier
+  const out = []; let buf = []; const flush = () => { out.push(new Uint8Array(buf)); buf = []; };
+  const b = (...v) => buf.push(...v), w16 = v => b(v & 255, v >> 8), str = s => b(...[...s].map(c => c.charCodeAt(0)));
+  str('GIF89a'); w16(w); w16(h); b(0xF7, 0, 0);
+  for (let i=0; i<256; i++){ const p = i < off ? [0,0,0] : pal[i-off] || [0,0,0]; b(Math.round(p[0]), Math.round(p[1]), Math.round(p[2])); }
+  b(0x21, 0xFF, 11); str('NETSCAPE2.0'); b(3, 1, 0, 0, 0);   // boucle infinie
+  const idx = new Uint8Array(w*h);
+  for (const im of frames){
+    const d = im.data;
+    for (let i=0, j=0; i<d.length; i+=4, j++) idx[j] = transp && d[i+3] < 128 ? 0 : near((d[i]>>3)<<10 | (d[i+1]>>3)<<5 | d[i+2]>>3);
+    b(0x21, 0xF9, 4, transp ? (2<<2)|1 : (1<<2)); w16(delay); b(0, 0);
+    b(0x2C); w16(0); w16(0); w16(w); w16(h); b(0); flush();
+    const lz = lzw(idx, 8); out.push(new Uint8Array([8]));
+    for (let i=0; i<lz.length; i+=255){ const n = Math.min(255, lz.length-i); const blk = new Uint8Array(n+1); blk[0] = n; blk.set(lz.subarray(i, i+n), 1); out.push(blk); }
+    out.push(new Uint8Array([0]));
+  }
+  b(0x3B); flush();
+  return new Blob(out, {type:'image/gif'});
+}
+function lzw(idx, min){   // compression LZW du format GIF (codes de taille variable, octets poids faible d'abord)
+  const clear = 1 << min, eoi = clear + 1, out = new Uint8Array(idx.length*2 + 64); let o = 0, acc = 0, nb = 0;
+  let size = min + 1, next = eoi + 1; const dict = new Map();
+  const emit = c => { acc |= c << nb; nb += size; while (nb >= 8){ out[o++] = acc & 255; acc >>>= 8; nb -= 8; } };
+  emit(clear); let prefix = idx[0];
+  for (let i=1; i<idx.length; i++){
+    const k = idx[i], key = prefix << 8 | k, v = dict.get(key);
+    if (v !== undefined){ prefix = v; continue; }
+    emit(prefix);
+    if (next === 4096){ emit(clear); dict.clear(); size = min + 1; next = eoi + 1; }
+    else { if (next >= 1 << size) size++; dict.set(key, next++); }
+    prefix = k;
+  }
+  emit(prefix); emit(eoi); if (nb > 0) out[o++] = acc & 255;
+  return out.subarray(0, o);
+}
+
+// ============ Lexique ============
+$('#helpBtn').onclick = () => $('#help').classList.remove('hide');
+$('#helpClose').onclick = () => $('#help').classList.add('hide');
+$('#help').onclick = e => e.target.id === 'help' && $('#help').classList.add('hide');
+
+// ============ Démarrage ============
+renderSwatches(); setColor(UI.color); setTool('draw'); undoUI(); scaleUI(); fmtUI(); refresh();
+
+// ============ Auto-tests (console) ============
+(async () => {
+  // Un GIF de 2 images doit se relire avec les bonnes dimensions et la bonne couleur
+  const c = mk(5, 3), x = c.getContext('2d'); x.fillStyle = '#31412f'; x.fillRect(0, 0, 5, 3); x.fillStyle = '#f4e04d'; x.fillRect(2, 1, 1, 1);
+  const g = encodeGIF([x.getImageData(0, 0, 5, 3), x.getImageData(0, 0, 5, 3)], 5, 3, 12, false);
+  const im = new Image(); await new Promise((ok, ko) => { im.onload = ok; im.onerror = ko; im.src = URL.createObjectURL(g); });
+  const t = mk(5, 3).getContext('2d'); t.drawImage(im, 0, 0); const p = t.getImageData(2, 1, 1, 1).data, q = t.getImageData(0, 0, 1, 1).data;
+  console.assert(im.width === 5 && im.height === 3, 'GIF : mauvaises dimensions');
+  console.assert(Math.abs(p[0]-0xf4) < 9 && Math.abs(q[1]-0x41) < 9, 'GIF : mauvaises couleurs');
+  // La boucle doit retomber juste : multiple de 3 tremblements et du nombre d'images × durée
+  const fr = doc.frames, hd = doc.hold; doc.frames = 4; doc.hold = 2; console.assert(loopLen() === 24, 'boucle fausse'); doc.frames = fr; doc.hold = hd;
+  window.__selftest = 'ok';
+})().catch(e => { console.error('auto-test', e); window.__selftest = 'échec'; });
+</script>
+</body>
+</html>

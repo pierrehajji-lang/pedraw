@@ -1,0 +1,953 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brodeur · PDW</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link rel="stylesheet" href="../assets/outils.css">
+<script src="../assets/outils.js"></script>
+<style>
+.nm .ref{font-weight:400;font-size:12.5px;color:var(--muted)}
+.result{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:16px}
+.card h4{margin:0 0 12px;font-size:15px;display:flex;align-items:center;gap:8px}
+.card h4 .ic{color:var(--green)}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;grid-column:1/-1}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:12px 14px}
+.stat small{display:block;color:var(--muted);font-size:12.5px}
+.stat b{font-size:22px;font-family:var(--display)}
+.threads{display:flex;flex-direction:column;gap:6px}
+.th{display:grid;grid-template-columns:22px 26px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:14px}
+.th .o{font-weight:700;color:var(--muted);text-align:right}
+.th .sw{width:26px;height:26px;border-radius:2px;border:1px solid rgba(0,0,0,.15)}
+.th b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.th small{color:var(--muted);font-size:12px}
+.th .n{font-size:13px;color:var(--muted);white-space:nowrap}
+.alerts{display:flex;flex-direction:column;gap:8px;font-size:13.5px;line-height:1.4}
+.al{display:flex;gap:9px;padding:9px 11px;border-radius:2px}
+.al .ic{width:17px;height:17px;margin-top:1px}
+.al{border:1px solid var(--line);background:var(--soft)}
+.al.warn{border:1.5px solid var(--ink);font-weight:600}
+.al.ok{background:none}
+.play[aria-pressed=true]{background:var(--ink);color:var(--on);border-color:var(--ink)}
+@media (max-width:1100px){.result{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a href="../index.html" class="home" title="Retour à la boîte à outils"><svg class="ic" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg><span class="logo" data-logo="contour"></span></a>
+  <div class="sep"></div>
+  <div>
+    <h1>Le <em>brodeur</em></h1>
+    <p>Prépare et numérise tes visuels pour la broderie</p>
+  </div>
+  <button class="btn" id="helpBtn" data-ic="info"><span>Comment ça marche ?</span></button>
+</header>
+
+<div class="app">
+<aside class="panel">
+
+  <section class="step" id="step1">
+    <div class="step-h"><span class="num">1</span><h2>Ton visuel</h2></div>
+    <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choisir une image">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>
+      <strong>Dépose ton logo ici</strong>
+      <span>ou clique pour le choisir · PNG, JPG, WebP</span>
+    </div>
+    <div id="fileInfo" class="file hide">
+      <canvas id="thumb" width="112" height="112"></canvas>
+      <div><b id="fname"></b><span id="fpx"></span></div>
+      <button class="btn" id="change">Changer</button>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <div id="sizeBox" class="hide">
+      <div class="lbl">Taille brodée
+        <span class="tip" tabindex="0" data-tip="La taille réelle de la broderie. Repères : logo cœur 7 à 10 cm, casquette 5 à 6 cm de haut, dos 20 à 28 cm.">?</span><span data-unit-pick></span></div>
+      <div class="dims">
+        <label class="unit"><input type="number" id="wcm" data-len data-min="10" data-max="400" data-step="1" aria-label="Largeur"><span data-unit>cm</span></label>
+        ×
+        <label class="unit"><input type="number" id="hcm" data-len data-min="10" data-max="400" data-step="1" aria-label="Hauteur"><span data-unit>cm</span></label>
+      </div>
+      <div id="quality" class="quality"></div>
+    </div>
+  </section>
+
+  <section class="step locked" id="step2">
+    <div class="step-h"><span class="num">2</span><h2>Les fils</h2></div>
+    <div class="row" style="margin-top:0">
+      <span><b>Nombre de couleurs</b><span class="tip" tabindex="0" data-tip="Combien de couleurs l'outil doit chercher, fond compris. En broderie, moins il y a de couleurs, plus c'est rapide : chaque couleur = un changement de fil.">?</span></span>
+      <div class="stepper"><button id="kMinus" aria-label="Moins">−</button><output id="kOut">3</output><button id="kPlus" aria-label="Plus">+</button></div>
+    </div>
+    <div class="pal" id="palette"></div>
+    <div class="pal-actions">
+      <button class="btn" id="pick" data-ic="pipette">Pipette</button>
+      <button class="btn" id="addColor" data-ic="plus">Ajouter</button>
+      <button class="btn" id="detect" data-ic="wand" title="Relancer la détection automatique">Détecter</button>
+    </div>
+    <p class="hint">Note la référence du fil sous chaque couleur (ex. « Madeira 1147 ») : elle apparaîtra sur la fiche. Le <b>t-shirt</b> marque la couleur du tissu, qui n'est pas brodée.</p>
+  </section>
+
+  <section class="step locked" id="step3">
+    <div class="step-h"><span class="num">3</span><h2>Les points</h2></div>
+    <div class="lbl" style="margin-top:0">Textile
+      <span class="tip" tabindex="0" data-tip="Règle la densité et la compensation selon la matière : un jersey s'étire et se resserre plus qu'une toile.">?</span></div>
+    <div class="seg" data-name="fabric">
+      <button data-v="jersey" aria-pressed="true">T-shirt<small>jersey</small></button>
+      <button data-v="pique" aria-pressed="false">Sweat · polo<small>molleton, piqué</small></button>
+      <button data-v="toile" aria-pressed="false">Toile<small>casquette, tote</small></button>
+    </div>
+    <div class="range">
+      <div class="range-h"><span>Densité<span class="tip" tabindex="0" data-tip="Écart entre deux lignes de points. Plus petit = plus couvrant mais plus de points et un tissu plus rigide. 0,40 à 0,45 mm est la norme.">?</span></span><output for="dens"></output></div>
+      <input type="range" id="dens" min="0.3" max="0.7" step="0.01" value="0.44">
+    </div>
+    <div class="range">
+      <div class="range-h"><span>Compensation<span class="tip" tabindex="0" data-tip="Le fil tire le tissu et rétrécit les formes. On élargit donc un peu chaque forme pour compenser.">?</span></span><output for="comp"></output></div>
+      <input type="range" id="comp" min="0" max="0.6" step="0.05" value="0.35">
+    </div>
+    <div class="range">
+      <div class="range-h"><span>Satin jusqu'à<span class="tip" tabindex="0" data-tip="Les formes plus étroites que ça (lettres, traits) sont brodées en satin, des points brillants d'un bord à l'autre. Les plus larges sont remplies en points de remplissage (tatami).">?</span></span><output for="satin"></output></div>
+      <input type="range" id="satin" min="3" max="10" step="0.5" value="6">
+    </div>
+    <div class="range">
+      <div class="range-h"><span>Angle du remplissage<span class="tip" tabindex="0" data-tip="La direction des points dans les grandes zones. Elle change l'effet de la lumière sur le fil.">?</span></span><output for="angle"></output></div>
+      <input type="range" id="angle" min="0" max="175" step="5" value="45">
+    </div>
+    <div class="range">
+      <div class="range-h"><span>Longueur de point<span class="tip" tabindex="0" data-tip="Longueur des points dans les remplissages. 3 à 4 mm est un bon compromis.">?</span></span><output for="len"></output></div>
+      <input type="range" id="len" min="2" max="5" step="0.1" value="3.5">
+    </div>
+    <div class="range">
+      <div class="range-h"><span>Nettoyage des petites taches<span class="tip" tabindex="0" data-tip="Supprime les points isolés trop petits pour être brodés (bruit JPEG, poussières).">?</span></span><output for="clean"></output></div>
+      <input type="range" id="clean" min="0" max="2" step="0.1" value="0.5">
+    </div>
+    <div class="row"><span><b>Sous-couche</b><span class="tip" tabindex="0" data-tip="Des points espacés posés d'abord, sous le motif : ils stabilisent le tissu et soutiennent les points du dessus. À garder sauf cas particulier.">?</span></span><input type="checkbox" class="switch" id="under" checked></div>
+  </section>
+
+  <section class="step locked" id="step4">
+    <div class="step-h"><span class="num">4</span><h2>La machine</h2></div>
+    <div class="lbl" style="margin-top:0">Nom du projet</div>
+    <label class="unit"><input type="text" id="project" placeholder="Nom du projet" aria-label="Nom du projet" style="font-weight:700"></label>
+    <div class="row"><span><b>Vitesse</b><span class="tip" tabindex="0" data-tip="Vitesse moyenne de la brodeuse, en points par minute. Sert à estimer le temps de broderie.">?</span></span>
+      <label class="unit" style="flex:0 0 150px"><input type="number" id="speed" value="700" min="200" max="1500" step="50" aria-label="Vitesse en points par minute"><span>pts/min</span></label></div>
+    <div class="row"><span><b>Tarif</b><span class="tip" tabindex="0" data-tip="Facultatif : ton prix pour 1 000 points, pour estimer le coût de broderie d'une pièce.">?</span></span>
+      <label class="unit" style="flex:0 0 150px"><input type="number" id="price" min="0" step="0.05" placeholder="—" aria-label="Prix pour 1000 points"><span>€ / 1000 pts</span></label></div>
+  </section>
+
+  <div class="run-wrap">
+    <button class="btn primary big" id="run" disabled data-ic="needle">Numériser</button>
+    <span class="run-note hide" id="runNote">Réglages modifiés : relance pour mettre à jour</span>
+  </div>
+</aside>
+
+<main class="work">
+  <div class="toolbar">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabOrig" aria-selected="true" disabled>Original</button>
+      <button role="tab" id="tabSim" aria-selected="false" disabled>Broderie</button>
+    </div>
+    <button class="btn play" id="play" disabled data-ic="play" aria-pressed="false">Voir la couture</button>
+    <div class="zoom">
+      <button id="zOut" aria-label="Dézoomer"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+      <input type="range" id="zSlider" min="-5" max="3" step="0.02" value="0" aria-label="Niveau de zoom">
+      <button id="zIn" aria-label="Zoomer"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      <output id="zoomPct">—</output>
+      <button id="zFit" aria-label="Ajuster à la fenêtre" title="Ajuster"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></svg></button>
+    </div>
+    <div class="textile" title="Couleur du tissu dans l'aperçu">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M8 3 3 6l2 4 2-1v11h10V9l2 1 2-4-5-3a4 4 0 0 1-8 0z"/></svg>
+      <span>Tissu</span>
+      <div id="swatches" style="display:flex;gap:5px"></div>
+    </div>
+  </div>
+
+  <div class="viewer" id="viewer">
+    <div class="empty" id="empty">
+      <h3>Prêt à broder ?</h3>
+      <p>Dépose un logo à gauche. L'outil le transforme en points de broderie et prépare le fichier machine et la fiche technique.</p>
+      <div class="how">
+        <div><svg class="ic" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg><b>1. Importe</b>Un logo en aplats, en PNG ou JPG.</div>
+        <div><svg class="ic" viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M16 5h3v3"/><circle cx="6.5" cy="17.5" r="2"/><path d="M4 9c3 0 3 6 6 6s3-6 6-6"/></svg><b>2. Numérise</b>Remplissage, satin, sous-couche : tout est calculé.</div>
+        <div><svg class="ic" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 17v1.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V17"/></svg><b>3. Brode</b>Fichier .DST pour la machine + fiche technique PDF.</div>
+      </div>
+    </div>
+    <div id="stage"></div>
+    <div class="pickbar hide" id="pickbar"><svg class="ic" viewBox="0 0 24 24"><path d="m14.5 5.5 4 4"/><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L18 9l-3-3z"/><path d="M15 6 5.5 15.5 4 20l4.5-1.5L18 9"/></svg>Clique sur une couleur de l'image pour l'ajouter</div>
+    <div class="viewer-hint hide" id="viewerHint">Molette : zoomer · Glisser : se déplacer</div>
+    <div class="busy hide" id="busy"><div class="spin"></div><span id="busyTxt">Calcul…</span></div>
+  </div>
+
+  <div class="films-h">
+    <h3>Ta broderie</h3>
+    <span class="meta" id="resMeta">Le résumé apparaîtra ici après la numérisation</span>
+    <div class="exp">
+      <button class="btn" id="png" disabled data-ic="image">Aperçu PNG</button>
+      <button class="btn" id="pdf" disabled data-ic="pdf">Fiche technique PDF</button>
+      <button class="btn yellow" id="dst" disabled data-ic="download">Fichier machine .DST</button>
+    </div>
+  </div>
+  <div id="result"><div class="films"><div class="none">Nombre de points, temps de broderie, ordre des fils et alertes apparaîtront ici.</div></div></div>
+</main>
+</div>
+
+<div class="modal hide" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="modal-box">
+    <button class="btn icon close" id="helpClose" aria-label="Fermer" data-ic="x"></button>
+    <h2 id="helpTitle">Le petit lexique de la broderie</h2>
+    <p>Les mots de la broderie machine, en une phrase chacun.</p>
+    <div class="gloss">
+      <div><b data-ic="needle">Numérisation</b>Transformer un dessin en une liste de points que la brodeuse sait coudre, dans le bon ordre, avec les bons types de points.</div>
+      <div><b data-ic="fill">Remplissage (tatami)</b>Des rangées de points courts et décalés, comme des briques, pour couvrir les grandes zones.</div>
+      <div><b data-ic="satin">Satin</b>Des points longs qui vont d'un bord à l'autre d'une forme étroite. Brillant : idéal pour les lettres et les contours.</div>
+      <div><b data-ic="layers">Sous-couche</b>Des points espacés posés en premier sous le motif. Ils tiennent le tissu et donnent du relief.</div>
+      <div><b data-ic="trap">Compensation</b>Le fil resserre le tissu : on élargit un peu les formes pour qu'elles gardent leur taille une fois brodées.</div>
+      <div><b data-ic="lines">Densité</b>L'écart entre deux lignes de points. Environ 0,4 mm : en dessous, le tissu devient raide ; au-dessus, il se voit à travers.</div>
+      <div><b data-ic="x">Coupe</b>La machine coupe le fil pour aller broder ailleurs sans laisser de fil tendu entre deux zones.</div>
+      <div><b data-ic="download">Fichier .DST</b>Le format Tajima, lu par la grande majorité des brodeuses pro. Il contient les points et les changements de fil, pas les couleurs : d'où la fiche technique.</div>
+      <div><b data-ic="info">À savoir</b>La numérisation automatique convient aux logos simples. Fais toujours un essai sur une chute de tissu avant de lancer la production.</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+// ============ Petits outils ============
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const S = { w:0, h:0, data:null, src:null, name:'logo', palette:[], view:'orig', zoom:0, support:'#ffffff', pick:false, full:null, res:null };
+const tick = () => new Promise(r => setTimeout(r, 30));
+const hex2rgb = h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16));
+const rgb2hex = c => '#' + c.map(v => Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,'0')).join('');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fr = (v,d=1) => v.toFixed(d).replace('.',',');
+const nf = v => Math.round(v).toLocaleString('fr-FR');
+let toastT; function toast(t){ const e=$('#toast'); e.textContent=t; e.classList.add('on'); clearTimeout(toastT); toastT=setTimeout(()=>e.classList.remove('on'),4200); }
+function rgb2lab(r,g,b){
+  const f = c => (c/=255) <= 0.04045 ? c/12.92 : ((c+0.055)/1.055)**2.4;
+  r=f(r); g=f(g); b=f(b);
+  const h = t => t > 0.008856 ? Math.cbrt(t) : 7.787*t + 16/116;
+  const x=h((r*.4124+g*.3576+b*.1805)/.95047), y=h(r*.2126+g*.7152+b*.0722), z=h((r*.0193+g*.1192+b*.9505)/1.08883);
+  return [116*y-16, 500*(x-y), 200*(y-z)];
+}
+function colorName(hex){
+  const [L,a,b] = rgb2lab(...hex2rgb(hex)), C = Math.hypot(a,b);
+  if (L > 92 && C < 8) return 'Blanc';
+  if (L < 16) return 'Noir';
+  if (C < 9) return L > 65 ? 'Gris clair' : L > 38 ? 'Gris' : 'Gris foncé';
+  const H = (Math.atan2(b,a)*180/Math.PI + 360) % 360;
+  let n = [[15,'Rose'],[55,'Rouge'],[80,'Orange'],[110,'Jaune'],[175,'Vert'],[235,'Turquoise'],[315,'Bleu'],[340,'Violet'],[361,'Rose']].find(([m]) => H < m)[1];
+  if (L < 48 && (n==='Orange'||n==='Rouge'&&H>35)) n = 'Marron';
+  if (L < 55 && n==='Jaune') n = 'Kaki';
+  return n + (L < 35 && n!=='Marron' ? ' foncé' : L > 78 && n!=='Jaune' ? ' clair' : '');
+}
+function rng(a){ return () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const shade = (hex, k) => rgb2hex(hex2rgb(hex).map(v => k > 0 ? v + (255-v)*k : v*(1+k)));
+const project = () => $('#project').value.trim() || S.name;
+const base = () => project().replace(/[\\/:*?"<>|]+/g, '-');
+
+// ============ Pictos ============
+const IC = {
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+  pipette:'<path d="m14.5 5.5 4 4"/><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L18 9l-3-3z"/><path d="M15 6 5.5 15.5 4 20l4.5-1.5L18 9"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>', x:'<path d="M6 6l12 12M18 6 6 18"/>',
+  wand:'<path d="m4 20 11-11"/><path d="m14.5 3.5.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z"/><path d="M19 11l.5 1 1 .5-1 .5-.5 1-.5-1-1-.5 1-.5z"/>',
+  layers:'<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  download:'<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 17v1.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V17"/>',
+  pdf:'<path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h5"/>',
+  shirt:'<path d="M8 3 3 6l2 4 2-1v11h10V9l2 1 2-4-5-3a4 4 0 0 1-8 0z"/>',
+  image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
+  needle:'<path d="M5 19 19 5"/><path d="M16 5h3v3"/><circle cx="6.5" cy="17.5" r="2"/>',
+  fill:'<path d="M4 7h4m3 0h9M4 11h9m3 0h4M4 15h4m3 0h9M4 19h9m3 0h4"/>',
+  satin:'<path d="M5 4l14 3M5 8l14 3M5 12l14 3M5 16l14 3"/>',
+  lines:'<path d="M4 6h16M4 10h16M4 14h16M4 18h16"/>',
+  trap:'<rect x="3" y="6" width="11" height="11" rx="1"/><rect x="10" y="9" width="11" height="11" rx="1"/>',
+  play:'<path d="M7 4.5v15l12-7.5z"/>',
+  warn:'<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>',
+  check:'<path d="m5 12.5 4.5 4.5L19 7"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+};
+const ic = n => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${IC[n]}</svg>`;
+$$('[data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', ic(el.dataset.ic)));
+
+// ============ Contrôles ============
+const seg = name => $(`.seg[data-name="${name}"] [aria-pressed="true"]`).dataset.v;
+function setSeg(name, v){ $$(`.seg[data-name="${name}"] button`).forEach(b => b.setAttribute('aria-pressed', b.dataset.v === String(v))); }
+$$('.seg').forEach(g => g.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  setSeg(g.dataset.name, b.dataset.v); g.dispatchEvent(new Event('change', {bubbles:true}));
+}));
+const FMT = { dens: v => fr(+v,2)+' mm', comp: v => v==0 ? 'Aucune' : fr(+v,2)+' mm', satin: v => fr(+v,1)+' mm', angle: v => v+'°',
+  len: v => fr(+v,1)+' mm', clean: v => v==0 ? 'Aucun' : fr(+v,1)+' mm' };
+const syncOut = r => $(`output[for="${r.id}"]`).textContent = FMT[r.id](r.value);
+$$('.panel input[type=range]').forEach(r => { r.addEventListener('input', () => syncOut(r)); syncOut(r); });
+// Réglages typiques par matière (à affiner après un essai)
+const FABRICS = { jersey:{dens:0.44, comp:0.35}, pique:{dens:0.42, comp:0.3}, toile:{dens:0.40, comp:0.15} };
+$('.seg[data-name="fabric"]').addEventListener('change', () => {
+  const f = FABRICS[seg('fabric')]; $('#dens').value = f.dens; $('#comp').value = f.comp; syncOut($('#dens')); syncOut($('#comp'));
+});
+
+$('.panel').addEventListener('input', markDirty);
+$('.panel').addEventListener('change', markDirty);
+function markDirty(e){
+  if (!S.res) return;
+  if (e && (['speed','price','project'].includes(e.target.id) || e.target.classList.contains('ref'))){ renderResult(); return; }   // ne change que le résumé
+  $('#runNote').classList.remove('hide'); $('#run').lastChild.textContent = 'Mettre à jour';
+}
+
+// ============ 1. Chargement ============
+$('#drop').onclick = $('#change').onclick = () => $('#file').click();
+$('#drop').onkeydown = e => (e.key==='Enter'||e.key===' ') && (e.preventDefault(), $('#file').click());
+$('#file').onchange = e => { e.target.files[0] && loadFile(e.target.files[0]); e.target.value=''; };
+['dragover','dragenter'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); $('#drop').classList.add('over'); }));
+['dragleave','drop'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); $('#drop').classList.remove('over'); }));
+document.addEventListener('drop', e => e.dataTransfer.files[0] && loadFile(e.dataTransfer.files[0]));
+function loadFile(file){
+  if (!file.type.startsWith('image/')) return toast('Ce fichier n\'est pas une image (PNG, JPG, WebP…).');
+  const img = new Image();
+  img.onload = () => { S.name = file.name.replace(/\.[^.]+$/,''); loadImage(img); URL.revokeObjectURL(img.src); };
+  img.onerror = () => toast('Impossible de lire cette image.');
+  img.src = URL.createObjectURL(file);
+}
+function loadImage(img){
+  const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const ctx = c.getContext('2d'); ctx.drawImage(img,0,0);
+  Object.assign(S, { w:c.width, h:c.height, data:ctx.getImageData(0,0,c.width,c.height).data, src:c, res:null, view:'orig', zoom:0 });
+  const t = $('#thumb').getContext('2d'), k = Math.min(112/S.w, 112/S.h);
+  t.clearRect(0,0,112,112); t.drawImage(c, (112-S.w*k)/2, (112-S.h*k)/2, S.w*k, S.h*k);
+  $('#fname').textContent = S.name; $('#fpx').textContent = `${S.w} × ${S.h} pixels`; $('#project').value = S.name;
+  $('#drop').classList.add('hide'); $('#fileInfo').classList.remove('hide'); $('#sizeBox').classList.remove('hide');
+  $$('.step.locked').forEach(s => s.classList.remove('locked'));
+  $('#run').disabled = false; $('#runNote').classList.add('hide'); $('#run').lastChild.textContent = 'Numériser';
+  PDW.set($('#wcm'), S.w >= S.h ? 90 : 90*S.w/S.h);
+  updateSize('w'); detectPalette(); renderResult(); render();
+}
+function updateSize(from){
+  if (!S.w) return;
+  const ratio = S.h / S.w;
+  if (from === 'h') PDW.set($('#wcm'), PDW.get($('#hcm')) / ratio);
+  else PDW.set($('#hcm'), PDW.get($('#wcm')) * ratio);
+  const ppmm = S.w / Math.max(5, PDW.get($('#wcm')) || 10);
+  const [cls, title, txt] = ppmm >= 6 ? ['q-good','Image assez précise', 'Les contours seront fidèles.']
+    : ppmm >= 3 ? ['q-ok','Précision correcte', 'Les petits détails seront un peu simplifiés.']
+    : ['q-bad','Image trop petite', 'Les contours seront approximatifs : cherche un fichier plus grand.'];
+  $('#quality').className = 'quality ' + cls;
+  $('#quality').innerHTML = `<span class="dot"></span><div><b>${title} · ${fr(ppmm)} px/mm</b>${txt}</div>`;
+}
+$('#wcm').oninput = () => updateSize('w');
+$('#hcm').oninput = () => updateSize('h');
+document.addEventListener('pdw-unit', () => renderResult());
+
+// ============ 2. Fils ============
+function detectPalette(){
+  const k = +$('#kOut').value, d = S.data, w = S.w, h = S.h;
+  const step = Math.max(1, Math.round(Math.sqrt(w*h/80000)));
+  const grab = flatOnly => { const rgb=[], lab=[];
+    for (let y=0; y<h-1; y+=step) for (let x=0; x<w-1; x+=step){
+      const j=(y*w+x)*4; if (d[j+3] < 128) continue;
+      if (flatOnly){ const a=j+4, b=j+w*4;
+        if (Math.abs(d[j]-d[a])+Math.abs(d[j+1]-d[a+1])+Math.abs(d[j+2]-d[a+2]) > 30) continue;
+        if (Math.abs(d[j]-d[b])+Math.abs(d[j+1]-d[b+1])+Math.abs(d[j+2]-d[b+2]) > 30) continue; }
+      rgb.push([d[j],d[j+1],d[j+2]]); lab.push(rgb2lab(d[j],d[j+1],d[j+2]));
+    }
+    return {rgb, lab};
+  };
+  let {rgb, lab} = grab(true);
+  if (lab.length < 500) ({rgb, lab} = grab(false));
+  if (!lab.length) return;
+  const d2 = (a,b) => (a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2, R = rng(42);
+  let C = [lab[Math.floor(R()*lab.length)]];
+  while (C.length < k){
+    const D = lab.map(p => { let m=1e9; for (const c of C) m=Math.min(m,d2(p,c)); return m; });
+    let r = R() * D.reduce((a,b)=>a+b,0), j = 0;
+    while (j < D.length-1 && (r -= D[j]) > 0) j++;
+    C.push(lab[j]);
+  }
+  let sums;
+  for (let it=0; it<25; it++){
+    sums = C.map(() => [0,0,0,0,0,0,0]);
+    lab.forEach((p,i) => { let b=0, bd=1e9; C.forEach((c,ci) => { const v=d2(p,c); if (v<bd){bd=v;b=ci;} });
+      const s=sums[b]; s[0]+=p[0]; s[1]+=p[1]; s[2]+=p[2]; s[3]+=rgb[i][0]; s[4]+=rgb[i][1]; s[5]+=rgb[i][2]; s[6]++; });
+    C = sums.map((s,i) => s[6] ? [s[0]/s[6],s[1]/s[6],s[2]/s[6]] : C[i]);
+  }
+  const used = new Set();
+  S.palette = sums.map((s,i) => ({s,L:C[i][0]})).filter(o => o.s[6]).sort((a,b) => b.L-a.L).map(({s}) => {
+    const hex = rgb2hex([s[3]/s[6], s[4]/s[6], s[5]/s[6]]);
+    let name = colorName(hex), n = 2; while (used.has(name)) name = colorName(hex) + ' ' + n++; used.add(name);
+    return { hex, name, ref:'', fond:false };
+  });
+  const light = S.palette[0], [L,a,b] = rgb2lab(...hex2rgb(light.hex));
+  if (L > 90 && Math.hypot(a,b) < 10 && S.palette.length > 1) light.fond = true;
+  renderPalette();
+}
+function renderPalette(){
+  const box = $('#palette'); box.innerHTML = '';
+  $('#kOut').value = Math.max(1, S.palette.length) || $('#kOut').value;
+  S.palette.forEach((p,i) => {
+    const row = document.createElement('div'); row.className = 'pr' + (p.fond ? ' fond' : '');
+    row.innerHTML = `<label class="swb" style="background:${p.hex}" title="Changer la teinte (${p.hex.toUpperCase()})"><input type="color" value="${p.hex}" aria-label="Teinte"></label>
+      <div class="nm"><input value="${esc(p.name)}" aria-label="Nom de la couleur">${p.fond ? '<small>Tissu · non brodé</small>' : `<input class="ref" value="${esc(p.ref)}" placeholder="Réf. du fil (ex. Madeira 1147)" aria-label="Référence du fil">`}</div>
+      <button class="btn icon" aria-pressed="${p.fond}" title="${p.fond ? 'Couleur du tissu (non brodée)' : 'Marquer comme tissu (ne pas broder)'}">${ic('shirt')}</button>
+      <button class="btn icon" title="Retirer cette couleur">${ic('x')}</button>`;
+    const col = row.querySelector('input[type=color]'), [nm, ref] = row.querySelectorAll('.nm input'), [sup, del] = row.querySelectorAll('button');
+    col.oninput = () => { p.hex = col.value; row.firstElementChild.style.background = p.hex; };
+    nm.oninput = () => p.name = nm.value;
+    if (ref) ref.oninput = () => { p.ref = ref.value; if (S.res) renderResult(); };
+    sup.onclick = () => { p.fond = !p.fond; if (p.fond) setSupport(p.hex); renderPalette(); markDirty(); };
+    del.onclick = () => { S.palette.splice(i,1); renderPalette(); markDirty(); };
+    box.appendChild(row);
+  });
+}
+$('#kMinus').onclick = () => { $('#kOut').value = Math.max(1, +$('#kOut').value - 1); S.data && detectPalette(); };
+$('#kPlus').onclick = () => { $('#kOut').value = Math.min(12, +$('#kOut').value + 1); S.data && detectPalette(); };
+$('#detect').onclick = () => S.data && detectPalette();
+$('#addColor').onclick = () => { S.palette.push({hex:'#31412f', name:'Nouvelle couleur', ref:'', fond:false}); renderPalette(); };
+$('#pick').onclick = () => setPick(!S.pick);
+function setPick(on){
+  S.pick = on; $('#pick').setAttribute('aria-pressed', on);
+  if (on && S.view !== 'orig'){ S.view = 'orig'; render(); }
+  $('#pickbar').classList.toggle('hide', !on);
+}
+$('#stage').addEventListener('click', e => {
+  if (!S.pick || S.view !== 'orig' || e.target.tagName !== 'CANVAS') return;
+  const r = e.target.getBoundingClientRect(), x = Math.floor((e.clientX-r.left)/r.width*S.w), y = Math.floor((e.clientY-r.top)/r.height*S.h);
+  const acc = [0,0,0]; let n = 0;
+  for (let yy=Math.max(0,y-1); yy<=Math.min(S.h-1,y+1); yy++) for (let xx=Math.max(0,x-1); xx<=Math.min(S.w-1,x+1); xx++){ const j=(yy*S.w+xx)*4; acc[0]+=S.data[j]; acc[1]+=S.data[j+1]; acc[2]+=S.data[j+2]; n++; }
+  const hex = rgb2hex(acc.map(v => v/n));
+  S.palette.push({hex, name: colorName(hex), ref:'', fond:false}); renderPalette(); setPick(false); markDirty();
+  toast('Couleur ajoutée : ' + hex.toUpperCase());
+});
+
+// ============ Tissu (aperçu) ============
+const TEXTILES = [['Blanc','#ffffff'],['Naturel','#efe8d8'],['Gris chiné','#b9bab5'],['Sauge','#acbc9b'],['Vert forêt','#31412f'],['Marine','#1f2a44'],['Rouge','#a8282b'],['Noir','#1b1b1b']];
+$('#swatches').innerHTML = TEXTILES.map(([n,h]) => `<button class="tx" title="${n}" aria-label="Tissu ${n}" data-hex="${h}" style="background:${h}"></button>`).join('')
+  + `<label class="tx custom" title="Autre couleur"><input type="color" id="txCustom" aria-label="Autre couleur de tissu"></label>`;
+$$('.tx[data-hex]').forEach(b => b.onclick = () => setSupport(b.dataset.hex));
+$('#txCustom').oninput = e => setSupport(e.target.value);
+function setSupport(hex){
+  S.support = hex; $$('.tx[data-hex]').forEach(b => b.setAttribute('aria-pressed', b.dataset.hex === hex));
+  if (S.res){ drawSim(); if (S.view === 'sim') render(); }
+}
+setSupport('#ffffff');
+
+// ============ Étiquetage des couleurs (repris du Séparateur) ============
+function labelPixels(pal){
+  const {w,h,data:d} = S, n = w*h;
+  const done=new Uint8Array(262144), best=new Int8Array(262144), bestD=new Float32Array(262144), labc=new Float32Array(262144*3);
+  const prep = k => { if (done[k]) return; done[k]=1;
+    const L = rgb2lab(((k>>12)<<2)+2, (((k>>6)&63)<<2)+2, ((k&63)<<2)+2); labc[k*3]=L[0]; labc[k*3+1]=L[1]; labc[k*3+2]=L[2];
+    let bi=0, bd=1e9; pal.forEach((p,i) => { const v=(p.lab[0]-L[0])**2+(p.lab[1]-L[1])**2+(p.lab[2]-L[2])**2; if (v<bd){bd=v;bi=i;} });
+    best[k]=bi; bestD[k]=bd; };
+  const lbl=new Int8Array(n), keys=new Int32Array(n), flat=new Uint8Array(n);
+  for (let i=0;i<n;i++){ const j=i*4; if (d[j+3]<128){ lbl[i]=-1; keys[i]=-1; continue; }
+    const k=(d[j]>>2)<<12|(d[j+1]>>2)<<6|(d[j+2]>>2); keys[i]=k; prep(k); lbl[i]=best[k]; }
+  const diff = (i,q) => keys[q]<0 ? 999 : Math.abs(d[i*4]-d[q*4])+Math.abs(d[i*4+1]-d[q*4+1])+Math.abs(d[i*4+2]-d[q*4+2]);
+  for (let y=0;y<h;y++) for (let x=0;x<w;x++){ const i=y*w+x; if (keys[i]<0) continue;
+    let m=0; if (x>0) m=Math.max(m,diff(i,i-1)); if (x<w-1) m=Math.max(m,diff(i,i+1)); if (y>0) m=Math.max(m,diff(i,i-w)); if (y<h-1) m=Math.max(m,diff(i,i+w));
+    flat[i] = m < 36; }
+  for (let y=0;y<h;y++) for (let x=0;x<w;x++){ const i=y*w+x, k=keys[i];
+    if (k<0 || flat[i] || bestD[k] < 100) continue;
+    let mask=0;
+    for (let yy=Math.max(0,y-2); yy<=Math.min(h-1,y+2); yy++) for (let xx=Math.max(0,x-2); xx<=Math.min(w-1,x+2); xx++){ const q=yy*w+xx; if (flat[q]) mask |= 1<<lbl[q]; }
+    if (!mask) continue;
+    let bi=-1, bd=1e9;
+    pal.forEach((p,pi) => { if (!(mask>>pi&1)) return; const v=(p.lab[0]-labc[k*3])**2+(p.lab[1]-labc[k*3+1])**2+(p.lab[2]-labc[k*3+2])**2; if (v<bd){bd=v;bi=pi;} });
+    lbl[i]=bi; }
+  return lbl;
+}
+function despeckle(lbl,w,h,minArea){
+  if (minArea < 2) return;
+  const n=w*h, seen=new Uint8Array(n), stack=new Int32Array(n), cells=new Int32Array(n), nb=new Float64Array(16);
+  for (let s=0;s<n;s++){
+    if (seen[s]) continue;
+    const L=lbl[s]; let top=0, cnt=0; stack[top++]=s; seen[s]=1; nb.fill(0);
+    const visit = q => { if (lbl[q]===L){ if (!seen[q]){ seen[q]=1; stack[top++]=q; } } else nb[lbl[q]+1]++; };
+    while (top){ const p=stack[--top], x=p%w; cells[cnt++]=p;
+      if (x>0) visit(p-1); if (x<w-1) visit(p+1); if (p>=w) visit(p-w); if (p<n-w) visit(p+w); }
+    if (cnt < minArea){ let bi=-1, bv=0; for (let i=0;i<16;i++) if (nb[i]>bv){ bv=nb[i]; bi=i; } if (bi>=0) for (let c=0;c<cnt;c++) lbl[cells[c]]=bi-1; }
+  }
+}
+
+// ============ Numérisation ============
+// Zones connexes d'une même couleur, avec leur boîte, surface et axe principal
+function components(grid, W, H){
+  const comp = new Int32Array(W*H).fill(-1), stack = new Int32Array(W*H), regions = [];
+  for (let s=0;s<W*H;s++){
+    if (comp[s] >= 0 || grid[s] < 0) continue;
+    const L = grid[s], r = { id:regions.length, label:L, area:0, x0:W, y0:H, x1:0, y1:0, sx:0, sy:0, sxx:0, syy:0, sxy:0, maxd:0, mx:0, my:0 };
+    let top = 0; stack[top++] = s; comp[s] = r.id;
+    while (top){
+      const p = stack[--top], x = p%W, y = (p/W)|0;
+      r.area++; r.sx+=x; r.sy+=y; r.sxx+=x*x; r.syy+=y*y; r.sxy+=x*y;
+      if (x<r.x0) r.x0=x; if (x>r.x1) r.x1=x; if (y<r.y0) r.y0=y; if (y>r.y1) r.y1=y;
+      for (const q of [x>0?p-1:-1, x<W-1?p+1:-1, y>0?p-W:-1, y<H-1?p+W:-1]) if (q>=0 && comp[q]<0 && grid[q]===L){ comp[q]=r.id; stack[top++]=q; }
+    }
+    regions.push(r);
+  }
+  return {comp, regions};
+}
+// Distance au bord de sa zone (chanfrein) → largeur de chaque zone
+function distMap(grid, W, H){
+  const d = new Float32Array(W*H);
+  for (let y=0;y<H;y++) for (let x=0;x<W;x++){ const i=y*W+x, L=grid[i];
+    d[i] = L<0 ? 0 : (x===0||y===0||x===W-1||y===H-1||grid[i-1]!==L||grid[i+1]!==L||grid[i-W]!==L||grid[i+W]!==L) ? 0.5 : 1e9; }
+  const rel = (i,q,c) => { if (grid[q]===grid[i] && d[q]+c < d[i]) d[i] = d[q]+c; };
+  for (let y=1;y<H-1;y++) for (let x=1;x<W-1;x++){ const i=y*W+x; if (d[i]<=0.5) continue; rel(i,i-1,1); rel(i,i-W,1); rel(i,i-W-1,1.414); rel(i,i-W+1,1.414); }
+  for (let y=H-2;y>0;y--) for (let x=W-2;x>0;x--){ const i=y*W+x; if (d[i]<=0.5) continue; rel(i,i+1,1); rel(i,i+W,1); rel(i,i+W+1,1.414); rel(i,i+W-1,1.414); }
+  return d;
+}
+// Lignes de balayage à l'angle θ, espacées de sp px : intervalles [u0,u1] à l'intérieur de la zone
+function scanRows(comp, id, W, H, r, theta, sp){
+  const c = Math.cos(theta), s = Math.sin(theta), U = [], V = [];
+  for (const [x,y] of [[r.x0,r.y0],[r.x1+1,r.y0],[r.x0,r.y1+1],[r.x1+1,r.y1+1]]){ U.push(x*c+y*s); V.push(-x*s+y*c); }
+  const umin = Math.min(...U)-1, umax = Math.max(...U)+1, vmin = Math.min(...V), vmax = Math.max(...V), rows = [];
+  let ri = 0;
+  for (let v = vmin + sp/2; v < vmax; v += sp, ri++){
+    const iv = []; let inside = false, start = 0;
+    for (let u = umin; u <= umax; u += 0.5){
+      const xi = Math.floor(u*c - v*s), yi = Math.floor(u*s + v*c);
+      const ins = xi>=0 && yi>=0 && xi<W && yi<H && comp[yi*W+xi] === id;
+      if (ins && !inside){ inside = true; start = u; } else if (!ins && inside){ inside = false; iv.push([start, u]); }
+    }
+    if (inside) iv.push([start, umax]);
+    rows.push({v, r:ri, iv});
+  }
+  return rows;
+}
+// Élargit (compensation) ou rétrécit (sous-couche) chaque intervalle de e px de chaque côté
+const adjust = (rows, e) => rows.map(row => ({...row, iv: row.iv.map(([a,b]) => [a-e, b+e]).filter(([a,b]) => b-a > 0.6)}));
+// Regroupe les intervalles en blocs « d'un seul tenant » qu'on peut coudre en aller-retour sans sauter
+function toBlocks(rows){
+  const blocks = []; let open = [];
+  const ov = (a,b) => a[0] <= b[1] && b[0] <= a[1];
+  for (const row of rows){
+    const next = [], used = new Set();
+    for (const iv of row.iv){
+      const cand = open.filter(b => ov(b.rows[b.rows.length-1].iv, iv));
+      if (cand.length === 1 && !used.has(cand[0]) && row.iv.filter(o => ov(cand[0].rows[cand[0].rows.length-1].iv, o)).length === 1){
+        cand[0].rows.push({v:row.v, r:row.r, iv}); used.add(cand[0]); next.push(cand[0]);
+      } else { const b = {rows:[{v:row.v, r:row.r, iv}]}; blocks.push(b); next.push(b); }
+    }
+    open = next;
+  }
+  return blocks;
+}
+const xy = (u, v, t) => ({ x: u*Math.cos(t) - v*Math.sin(t), y: u*Math.sin(t) + v*Math.cos(t) });
+// Coud un bloc en aller-retour ; satin = 1 point d'un bord à l'autre, sinon points de longueur L décalés en briques
+function stitchBlock(b, rev, side, p){
+  const rows = rev ? [...b.rows].reverse() : b.rows, pts = []; let sd = side;
+  for (const row of rows){
+    const [a, c] = row.iv, from = sd ? c : a, to = sd ? a : c, len = Math.abs(to-from), us = [from];
+    if (!(p.satin && len <= p.satinMax)){
+      const off = ((row.r % 3) / 3) * p.L, dir = Math.sign(to-from) || 1;
+      let k = dir > 0 ? Math.floor((from-off)/p.L) + 1 : Math.ceil((from-off)/p.L) - 1;
+      for (;; k += dir){ const u = k*p.L + off; if (dir > 0 ? u >= to - p.L*0.3 : u <= to + p.L*0.3) break; if (Math.abs(u-from) > p.L*0.3) us.push(u); }
+    }
+    us.push(to);
+    for (const u of us) pts.push(xy(u, row.v, p.theta));
+    sd = 1 - sd;
+  }
+  return pts;
+}
+// Enchaîne les blocs en allant toujours au plus proche
+function sequence(blocks, cur, p, runs, tag){
+  const left = [...blocks];
+  while (left.length){
+    let best = null;
+    for (const b of left) for (const rev of [0,1]) for (const side of [0,1]){
+      const row = rev ? b.rows[b.rows.length-1] : b.rows[0], e = xy(side ? row.iv[1] : row.iv[0], row.v, p.theta), d = Math.hypot(e.x-cur.x, e.y-cur.y);
+      if (!best || d < best.d) best = {b, rev, side, d};
+    }
+    left.splice(left.indexOf(best.b), 1);
+    const pts = stitchBlock(best.b, best.rev, best.side, p);
+    runs.push({pts, ...tag}); cur = pts[pts.length-1];
+  }
+  return cur;
+}
+
+// Direction du satin : on essaie 12 angles et on garde celui où les points restent courts et les blocs peu nombreux
+function satinAngle(comp, W, H, r, maxLen, g){
+  let best = r.phi + Math.PI/2, bs = Infinity;
+  for (let k=0;k<12;k++){
+    const t = r.phi + Math.PI/2 + k*Math.PI/12, rows = scanRows(comp, r.id, W, H, r, t, g);
+    let over = 0; for (const row of rows) for (const [a,b] of row.iv) if (b-a > maxLen) over += b-a;
+    const score = over + toBlocks(rows).length * 3*g;
+    if (score < bs){ bs = score; best = t; }
+  }
+  return best;
+}
+
+function params(){
+  return { dens:+$('#dens').value, comp:+$('#comp').value, satinMax:+$('#satin').value, angle:+$('#angle').value*Math.PI/180,
+           len:+$('#len').value, clean:+$('#clean').value, under:$('#under').checked };
+}
+
+async function digitize(busy){
+  const mmW = PDW.get($('#wcm')), mmH = PDW.get($('#hcm')), P = params();
+  if (!(mmW > 0 && mmH > 0)) throw new Error('Indique la taille brodée.');
+  const g = Math.min(10, 3000/Math.max(mmW, mmH)), W = Math.max(1, Math.round(mmW*g)), H = Math.max(1, Math.round(mmH*g));
+  const pal = S.palette.map((p,i) => ({...p, i, lab: rgb2lab(...hex2rgb(p.hex))}));
+  if (!pal.some(p => !p.fond)) throw new Error('Aucune couleur à broder : elles sont toutes marquées « tissu ».');
+  busy('Analyse des couleurs…'); await tick();
+  const lbl = labelPixels(pal), spm = S.w/mmW, cl = P.clean*spm;
+  despeckle(lbl, S.w, S.h, Math.round(cl*cl));
+  const grid = new Int8Array(W*H);
+  for (let y=0;y<H;y++){ const sy = Math.min(S.h-1, Math.floor((y+.5)/H*S.h));
+    for (let x=0;x<W;x++){ const l = lbl[sy*S.w + Math.min(S.w-1, Math.floor((x+.5)/W*S.w))]; grid[y*W+x] = l >= 0 && !pal[l].fond ? l : -1; } }
+  busy('Découpage des zones…'); await tick();
+  const {comp, regions} = components(grid, W, H), dist = distMap(grid, W, H);
+  for (let i=0;i<W*H;i++){ const id = comp[i]; if (id >= 0 && dist[i] > regions[id].maxd){ const r = regions[id]; r.maxd = dist[i]; r.mx = i%W; r.my = (i/W)|0; } }
+  for (const r of regions){
+    const n = r.area, cx = r.sx/n, cy = r.sy/n;
+    r.cx = cx; r.cy = cy; r.widthMM = 2*r.maxd/g; r.areaMM = n/g/g;
+    r.phi = 0.5*Math.atan2(2*(r.sxy/n - cx*cy), (r.sxx/n - cx*cx) - (r.syy/n - cy*cy));   // axe principal
+    r.kind = r.widthMM <= P.satinMax ? 'satin' : 'fill';
+    r.skip = r.areaMM < 0.3;
+  }
+  // Ordre des fils : les plus grandes surfaces d'abord (le fond avant les détails)
+  const colors = pal.filter(p => !p.fond).map(p => ({p, regions: regions.filter(r => r.label === p.i && !r.skip)}))
+    .filter(c => c.regions.length).map(c => ({...c, area: c.regions.reduce((a,r) => a + r.area, 0)})).sort((a,b) => b.area - a.area);
+  if (!colors.length) throw new Error('Rien à broder : le motif est vide ou trop petit.');
+  let cur = {x: W/2, y: H/2};
+  for (const [ci, c] of colors.entries()){
+    busy(`Points : ${c.p.name} (${ci+1}/${colors.length})…`); await tick();
+    c.runs = []; const left = [...c.regions];
+    while (left.length){
+      left.sort((a,b) => Math.hypot(a.cx-cur.x, a.cy-cur.y) - Math.hypot(b.cx-cur.x, b.cy-cur.y));
+      const r = left.shift(), satin = r.kind === 'satin', theta = satin ? satinAngle(comp, W, H, r, P.satinMax*g, g) : P.angle;
+      if (P.under){
+        const ut = satin ? theta : theta + Math.PI/2;
+        const rows = adjust(scanRows(comp, r.id, W, H, r, ut, (satin ? 1.6 : 2.0)*g), -(satin ? 0.35 : 0.5)*g);
+        cur = sequence(toBlocks(rows), cur, {theta:ut, L:3.5*g, satin, satinMax:1e9}, c.runs, {region:r.id, top:false});
+      }
+      const rows = adjust(scanRows(comp, r.id, W, H, r, theta, P.dens*g), P.comp*g/2);
+      cur = sequence(toBlocks(rows), cur, {theta, L:P.len*g, satin, satinMax:(P.satinMax+P.comp)*g}, c.runs, {region:r.id, top:true});
+    }
+  }
+  busy('Arrêts et coupes…'); await tick();
+  const cmds = buildCommands(colors, g);
+  const alerts = regions.filter(r => !r.skip && r.widthMM < 1 && r.area > 0);
+  return { g, W, H, mmW, mmH, colors, cmds, regions, thin: alerts, P };
+}
+
+// Liste de commandes : t 0 = point, 1 = saut (trim = coupe avant), 3 = changement de fil ; coordonnées en px de grille
+function buildCommands(colors, g){
+  const cmds = [], tieL = 0.5*g; let prev = null, before = null;
+  const st = p => { if (prev && Math.hypot(p.x-prev.x, p.y-prev.y) < 0.15*g) return; cmds.push({t:0, x:p.x, y:p.y}); before = prev; prev = p; cmds[cmds.length-1].c = cc; };
+  const tie = (p, q) => { const d = Math.hypot(q.x-p.x, q.y-p.y) || 1, u = {x: p.x+(q.x-p.x)/d*tieL, y: p.y+(q.y-p.y)/d*tieL};
+    for (const o of [u, p, u, p]) cmds.push({t:0, x:o.x, y:o.y, c:cc}); };
+  let cc = 0;
+  colors.forEach((c, ci) => {
+    cc = ci; c.stitches = 0;
+    if (ci > 0) cmds.push({t:3});
+    let last = null;
+    for (const run of c.runs){
+      const a = run.pts[0], gap = prev ? Math.hypot(a.x-prev.x, a.y-prev.y) : Infinity;
+      // dans une même zone, le déplacement est recouvert par les points suivants : pas besoin de couper
+      const direct = last && (gap < 1.5*g || (run.region === last.region && gap < 6*g));
+      if (direct){
+        const n = Math.ceil(gap / (4*g));   // déplacement cousu, recouvert ensuite
+        for (let i=1;i<n;i++) st({x: prev.x+(a.x-prev.x)*i/n, y: prev.y+(a.y-prev.y)*i/n});
+        st(a);
+      } else {
+        if (last){ tie(prev, before || prev); cmds.push({t:1, x:prev.x, y:prev.y, trim:true}); }
+        cmds.push({t:1, x:a.x, y:a.y}); prev = null; st(a); tie(a, run.pts[1] || a);
+      }
+      for (let i=1;i<run.pts.length;i++) st(run.pts[i]);
+      last = run;
+    }
+    if (prev){ tie(prev, before || prev); cmds.push({t:1, x:prev.x, y:prev.y, trim:true}); }
+  });
+  for (const cm of cmds) if (cm.t === 0) colors[cm.c].stitches++;
+  return cmds;
+}
+
+// ============ Format Tajima .DST ============
+function dstRec(x, y, flag){   // x, y en 0,1 mm, entre -121 et 121, y vers le haut
+  let b0 = 0, b1 = 0, b2 = 3;
+  if (x > 40){ b2|=0x04; x-=81; } if (x < -40){ b2|=0x08; x+=81; }
+  if (x > 13){ b1|=0x04; x-=27; } if (x < -13){ b1|=0x08; x+=27; }
+  if (x > 4){ b0|=0x04; x-=9; }  if (x < -4){ b0|=0x08; x+=9; }
+  if (x > 1){ b1|=0x01; x-=3; }  if (x < -1){ b1|=0x02; x+=3; }
+  if (x > 0){ b0|=0x01; x-=1; }  if (x < 0){ b0|=0x02; x+=1; }
+  if (y > 40){ b2|=0x20; y-=81; } if (y < -40){ b2|=0x10; y+=81; }
+  if (y > 13){ b1|=0x20; y-=27; } if (y < -13){ b1|=0x10; y+=27; }
+  if (y > 4){ b0|=0x20; y-=9; }  if (y < -4){ b0|=0x10; y+=9; }
+  if (y > 1){ b1|=0x80; y-=3; }  if (y < -1){ b1|=0x40; y+=3; }
+  if (y > 0){ b0|=0x80; y-=1; }  if (y < 0){ b0|=0x40; y+=1; }
+  if (flag === 'jump') b2 |= 0x80;
+  if (flag === 'color') b2 |= 0xC0;
+  return [b0, b1, b2];
+}
+function dstDec([b0,b1,b2]){
+  const bit = (b,n) => (b>>n)&1;
+  const x = bit(b2,2)*81 - bit(b2,3)*81 + bit(b1,2)*27 - bit(b1,3)*27 + bit(b0,2)*9 - bit(b0,3)*9 + bit(b1,0)*3 - bit(b1,1)*3 + bit(b0,0) - bit(b0,1);
+  const y = bit(b2,5)*81 - bit(b2,4)*81 + bit(b1,5)*27 - bit(b1,4)*27 + bit(b0,5)*9 - bit(b0,4)*9 + bit(b1,7)*3 - bit(b1,6)*3 + bit(b0,7) - bit(b0,6);
+  return [x, y];
+}
+function toDST(res, label){
+  const f = 10/res.g, recs = []; let cx = 0, cy = 0, minX = 0, maxX = 0, minY = 0, maxY = 0;
+  const go = (gx, gy, jump, minSteps=1) => {
+    const x = Math.round((gx - res.W/2)*f), y = Math.round((gy - res.H/2)*f), dx = x-cx, dy = y-cy;
+    const n = Math.max(minSteps, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy))/121)); let px = cx, py = cy;
+    for (let i=1;i<=n;i++){ const tx = cx + Math.round(dx*i/n), ty = cy + Math.round(dy*i/n); recs.push(dstRec(tx-px, -(ty-py), jump ? 'jump' : null)); px = tx; py = ty; }
+    cx = x; cy = y; minX = Math.min(minX,x); maxX = Math.max(maxX,x); minY = Math.min(minY,y); maxY = Math.max(maxY,y);
+  };
+  let colorsCh = 0;
+  for (const c of res.cmds){
+    if (c.t === 0) go(c.x, c.y, false);
+    else if (c.t === 1) go(c.x, c.y, true, c.trim ? 3 : 1);   // 3 sauts consécutifs = coupe sur les machines Tajima
+    else if (c.t === 3){ recs.push(dstRec(0,0,'color')); colorsCh++; }
+  }
+  recs.push([0,0,0xF3]);
+  const pad = (v,n) => String(v).padStart(n,' ');
+  const name = label.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\x20-\x7e]/g,'').slice(0,16).padEnd(16,' ');
+  const head = `LA:${name}\rST:${pad(recs.length,7)}\rCO:${pad(colorsCh,3)}\r+X:${pad(maxX,5)}\r-X:${pad(-minX,5)}\r+Y:${pad(-minY,5)}\r-Y:${pad(maxY,5)}\rAX:+${pad(0,5)}\rAY:+${pad(0,5)}\rMX:+${pad(0,5)}\rMY:+${pad(0,5)}\rPD:******\r\x1a`;
+  const out = new Uint8Array(512 + recs.length*3).fill(0x20, 0, 512);
+  for (let i=0;i<head.length;i++) out[i] = head.charCodeAt(i);
+  recs.forEach((r,i) => out.set(r, 512 + i*3));
+  return out;
+}
+
+// ============ Simulation de la broderie ============
+function segments(res){
+  const segs = []; let pos = null;
+  for (const c of res.cmds){
+    if (c.t === 1){ pos = null; continue; }
+    if (c.t !== 0) continue;
+    if (pos) segs.push([pos.x, pos.y, c.x, c.y, c.c]);
+    pos = c;
+  }
+  return segs;
+}
+function drawSim(upTo){
+  const res = S.res, q = Math.min(3, 2400/Math.max(res.W, res.H)), c = S.sim || (S.sim = document.createElement('canvas'));
+  if (c.width !== Math.round(res.W*q)) { c.width = Math.round(res.W*q); c.height = Math.round(res.H*q); }
+  c._red = null;   // l'image change : on jette les versions réduites en cache
+  const ctx = c.getContext('2d'), segs = res.segs, n = upTo ?? segs.length, lw = 0.4*res.g*q;
+  ctx.fillStyle = S.support; ctx.fillRect(0,0,c.width,c.height);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  drawSegs(ctx, segs, 0, n, q, lw);
+  if (upTo == null) drawMarkers(ctx, q);
+  res.q = q; res.drawn = n;
+  return c;
+}
+// Chaque point : un trait foncé (ombre), la couleur du fil, puis un reflet
+function drawSegs(ctx, segs, from, to, q, lw){
+  let i = from;
+  while (i < to){
+    const ci = segs[i][4], col = S.res.colors[ci].p.hex, p = new Path2D();
+    for (; i < to && segs[i][4] === ci; i++){ const s = segs[i]; p.moveTo(s[0]*q, s[1]*q); p.lineTo(s[2]*q, s[3]*q); }
+    ctx.strokeStyle = shade(col, -0.35); ctx.lineWidth = lw*1.15; ctx.stroke(p);
+    ctx.strokeStyle = col; ctx.lineWidth = lw*0.85; ctx.stroke(p);
+    ctx.strokeStyle = shade(col, 0.4) + '88'; ctx.lineWidth = lw*0.25; ctx.stroke(p);
+  }
+}
+function drawMarkers(ctx, q){
+  const res = S.res;
+  res.thin.forEach((r, i) => {
+    const x = r.mx*q, y = r.my*q, rad = Math.max(12, 2.5*res.g*q);
+    ctx.strokeStyle = '#d03b1f'; ctx.lineWidth = Math.max(2, rad*0.12); ctx.setLineDash([rad*0.3, rad*0.2]);
+    ctx.beginPath(); ctx.arc(x, y, rad, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#d03b1f'; ctx.beginPath(); ctx.arc(x+rad*0.75, y-rad*0.75, rad*0.38, 0, 7); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.round(rad*0.45)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(i+1, x+rad*0.75, y-rad*0.73);
+  });
+}
+// Animation : la machine brode sous tes yeux
+let anim = null;
+$('#play').onclick = () => {
+  if (anim){ cancelAnimationFrame(anim); anim = null; $('#play').setAttribute('aria-pressed', false); drawSim(); S.sim._red = null; render(); return; }
+  S.view = 'sim'; $('#play').setAttribute('aria-pressed', true);
+  const res = S.res, total = res.segs.length, per = Math.max(2, Math.ceil(total / 420));   // ~7 secondes
+  let n = 0; drawSim(0); render();
+  const ctx = S.sim.getContext('2d'), lw = 0.4*res.g*res.q;
+  const stepF = () => {
+    const to = Math.min(total, n + per); drawSegs(ctx, res.segs, n, to, res.q, lw); n = to;
+    S.sim._red = null; applyZoom();
+    if (n < total) anim = requestAnimationFrame(stepF); else { anim = null; $('#play').setAttribute('aria-pressed', false); drawSim(); S.sim._red = null; applyZoom(); }
+  };
+  anim = requestAnimationFrame(stepF);
+};
+
+// ============ Lancer ============
+$('#run').onclick = async () => {
+  $('#run').disabled = true; setPick(false); if (anim){ cancelAnimationFrame(anim); anim = null; }
+  const busy = t => { $('#busy').classList.remove('hide'); $('#busyTxt').textContent = t; };
+  try {
+    const res = await digitize(busy);
+    res.segs = segments(res); S.res = res; S.sim = null; drawSim(); S.view = 'sim';
+    renderResult(); render();
+    $('#runNote').classList.add('hide'); $('#run').lastChild.textContent = 'Numériser';
+    toast(`${nf(res.cmds.filter(c => c.t===0).length)} points en ${res.colors.length} couleur${res.colors.length>1?'s':''}.`);
+  } catch (e){ console.error(e); toast(e.message); }
+  $('#busy').classList.add('hide'); $('#run').disabled = false;
+};
+
+// ============ Résumé ============
+function stats(){
+  const res = S.res, n = res.cmds.filter(c => c.t===0).length, trims = res.cmds.filter(c => c.trim).length, changes = res.colors.length - 1;
+  const speed = Math.max(100, +$('#speed').value || 700), min = n/speed + trims*4/60 + changes*8/60;
+  const price = +$('#price').value;
+  return { n, trims, changes, min, cost: price > 0 ? n/1000*price : null };
+}
+function renderResult(){
+  const box = $('#result'), has = !!S.res;
+  ['#png','#pdf','#dst','#play'].forEach(s => $(s).disabled = !has);
+  if (!has){ box.innerHTML = '<div class="films"><div class="none">Nombre de points, temps de broderie, ordre des fils et alertes apparaîtront ici.</div></div>'; $('#resMeta').textContent = 'Le résumé apparaîtra ici après la numérisation'; return; }
+  const res = S.res, st = stats();
+  $('#resMeta').textContent = `${PDW.len(res.mmW)} × ${PDW.len(res.mmH)} · ${res.colors.length} fil${res.colors.length>1?'s':''}`;
+  const alerts = [];
+  if (res.thin.length) alerts.push(['warn', `${res.thin.length} détail${res.thin.length>1?'s':''} de moins de 1 mm de large (cerclé${res.thin.length>1?'s':''} en rouge) : ${res.thin.length>1?'ils risquent':'il risque'} de mal ressortir. ${res.thin.length>1?'Épaissis-les':'Épaissis-le'} ou agrandis le motif.`]);
+  if (res.colors.length > 12) alerts.push(['warn', 'Plus de 12 couleurs : vérifie le nombre d\'aiguilles de la brodeuse.']);
+  if (Math.max(res.mmW, res.mmH) > 300) alerts.push(['warn', 'Plus de 30 cm : vérifie que le motif tient dans le cadre de la machine.']);
+  if (st.n > 40000) alerts.push(['info', 'Motif très chargé : pense à réduire la taille ou la densité pour garder un tissu souple.']);
+  if (!alerts.some(a => a[0]==='warn')) alerts.push(['ok', 'Aucun détail trop fin détecté.']);
+  alerts.push(['info', 'Numérisation automatique : fais un essai sur une chute de tissu avant la production.']);
+  box.innerHTML = `<div class="result">
+    <div class="stats">
+      <div class="stat"><small>Points</small><b>${nf(st.n)}</b></div>
+      <div class="stat"><small>Temps estimé</small><b>${st.min < 1 ? '< 1' : 'env. ' + Math.round(st.min)} min</b></div>
+      <div class="stat"><small>Fils</small><b>${res.colors.length}</b></div>
+      <div class="stat"><small>Coupes</small><b>${st.trims}</b></div>
+      <div class="stat"><small>Taille (${PDW.unit})</small><b>${fr(res.mmW/(PDW.unit==="mm"?1:10))}×${fr(res.mmH/(PDW.unit==="mm"?1:10))}</b></div>
+      ${st.cost != null ? `<div class="stat"><small>Coût par pièce</small><b>${fr(st.cost,2)} €</b></div>` : ''}
+    </div>
+    <div class="card"><h4>${ic('layers')}Ordre des fils</h4><div class="threads">
+      ${res.colors.map((c,i) => `<div class="th"><span class="o">${i+1}</span><span class="sw" style="background:${c.p.hex}"></span>
+        <div><b>${esc(c.p.name)}</b><small>${esc(S.palette[c.p.i]?.ref || 'Référence du fil à compléter')}</small></div><span class="n">${nf(c.stitches)} pts</span></div>`).join('')}
+    </div></div>
+    <div class="card"><h4>${ic('warn')}Points d'attention</h4><div class="alerts">
+      ${alerts.map(([k,t]) => `<div class="al ${k}">${ic(k==='ok' ? 'check' : k==='warn' ? 'warn' : 'info')}<span>${t}</span></div>`).join('')}
+    </div></div>
+  </div>`;
+}
+
+// ============ Affichage / zoom (repris du Séparateur) ============
+function render(){
+  const has = !!S.w;
+  $('#empty').classList.toggle('hide', has);
+  $('#tabOrig').disabled = !has; $('#tabSim').disabled = !S.res;
+  if (!has){ $('#stage').replaceChildren(); S.full = null; return; }
+  if (S.view === 'sim' && !S.res) S.view = 'orig';
+  S.full = S.view === 'orig' ? S.src : S.sim;
+  $('#tabOrig').setAttribute('aria-selected', S.view === 'orig');
+  $('#tabSim').setAttribute('aria-selected', S.view === 'sim');
+  applyZoom();
+}
+$('#tabOrig').onclick = () => { S.view = 'orig'; render(); };
+$('#tabSim').onclick = () => { S.view = 'sim'; setPick(false); render(); };
+function reduced(full, targetW){
+  const chain = full._red || (full._red = [full]);
+  let i = 0;
+  while (chain[i].width/2 >= targetW){
+    if (!chain[i+1]){ const c = chain[i], n = document.createElement('canvas'); n.width = Math.round(c.width/2); n.height = Math.max(1, Math.round(c.height/2));
+      const x = n.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(c,0,0,n.width,n.height); chain.push(n); }
+    i++;
+  }
+  return chain[i];
+}
+const ZMIN = 2**-5, ZMAX = 8;
+function applyZoom(){
+  const full = S.full, st = $('#stage'), v = $('#viewer'); if (!full) return;
+  const z = S.zoom || Math.min((v.clientWidth-48)/full.width, (v.clientHeight-48)/full.height, 1);
+  const c = reduced(full, full.width*z*devicePixelRatio);
+  c.style.width = full.width*z + 'px';
+  if (st.firstChild !== c) st.replaceChildren(c);
+  S.curZ = z; $('#zoomPct').textContent = Math.max(1, Math.round(z*100)) + ' %';
+  $('#zSlider').value = Math.log2(z);
+  v.classList.toggle('grab', (v.scrollWidth > v.clientWidth || v.scrollHeight > v.clientHeight) && !S.pick);
+  $('#viewerHint').classList.remove('hide');
+}
+function zoomTo(z, cx, cy){
+  const v = $('#viewer'), c = $('#stage canvas'); if (!c) return;
+  z = Math.min(ZMAX, Math.max(ZMIN, z));
+  const vr = v.getBoundingClientRect(); cx ??= vr.left + vr.width/2; cy ??= vr.top + vr.height/2;
+  const r = c.getBoundingClientRect(), px = (cx - r.left)/S.curZ, py = (cy - r.top)/S.curZ;
+  S.zoom = z; applyZoom();
+  const r2 = $('#stage canvas').getBoundingClientRect();
+  v.scrollLeft += r2.left + px*z - cx; v.scrollTop += r2.top + py*z - cy;
+}
+const curZoom = () => S.curZ || 1;
+$('#zIn').onclick = () => zoomTo(curZoom()*1.5);
+$('#zOut').onclick = () => zoomTo(curZoom()/1.5);
+$('#zSlider').oninput = e => zoomTo(2**+e.target.value);
+$('#zFit').onclick = () => { S.zoom = 0; applyZoom(); };
+window.addEventListener('resize', () => !S.zoom && applyZoom());
+$('#viewer').addEventListener('wheel', e => { if (!S.full) return; e.preventDefault(); zoomTo(curZoom() * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX, e.clientY); }, {passive:false});
+{ let drag = null;
+  $('#viewer').addEventListener('pointerdown', e => {
+    if (S.pick || e.button !== 0 || !$('#viewer').classList.contains('grab')) return;
+    drag = {x:e.clientX, y:e.clientY, l:$('#viewer').scrollLeft, t:$('#viewer').scrollTop};
+    $('#viewer').classList.add('grabbing'); $('#viewer').setPointerCapture(e.pointerId);
+  });
+  $('#viewer').addEventListener('pointermove', e => { if (!drag) return; const v = $('#viewer'); v.scrollLeft = drag.l - (e.clientX-drag.x); v.scrollTop = drag.t - (e.clientY-drag.y); });
+  const end = () => { drag = null; $('#viewer').classList.remove('grabbing'); };
+  $('#viewer').addEventListener('pointerup', end); $('#viewer').addEventListener('pointercancel', end);
+}
+
+// ============ Exports ============
+function save(blob, name){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+$('#dst').onclick = () => { save(new Blob([toDST(S.res, project())], {type:'application/octet-stream'}), base() + '.dst'); toast('Fichier .DST téléchargé. Les couleurs de fil sont sur la fiche technique.'); };
+$('#png').onclick = () => { if (anim) $('#play').click(); drawSim(); S.sim.toBlob(b => save(b, base() + '_apercu-broderie.png')); };
+$('#pdf').onclick = () => {
+  if (anim) $('#play').click();
+  const { jsPDF } = window.jspdf, doc = new jsPDF({unit:'mm', format:'a4'}), res = S.res, st = stats();
+  doc.setFillColor(49,65,47); doc.rect(0,0,210,30,'F');
+  doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(20); doc.text('Fiche broderie', 14, 14);
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.text(`${project()}  ·  ${new Date().toLocaleDateString('fr-FR')}`, 14, 22);
+  const sim = drawSim(), bw = 182, bh = 100, k = Math.min(bw/sim.width, bh/sim.height), iw = sim.width*k, ih = sim.height*k;
+  doc.setFillColor(245,244,238); doc.roundedRect(14, 38, bw, bh, 3, 3, 'F');
+  const sm = reduced(sim, 1300);   // image allégée : la fiche reste légère à envoyer
+  doc.addImage(sm.toDataURL('image/jpeg', 0.88), 'JPEG', 14 + (bw-iw)/2, 38 + (bh-ih)/2, iw, ih);
+  doc.setTextColor(34,48,31); let y = 150;
+  const line = (a, b) => { doc.setFont('helvetica','normal'); doc.setTextColor(100,109,92); doc.text(a, 14, y); doc.setFont('helvetica','bold'); doc.setTextColor(34,48,31); doc.text(b, 70, y); y += 7; };
+  doc.setFontSize(10.5);
+  line('Taille brodée', `${PDW.len(res.mmW)} × ${PDW.len(res.mmH)}`);
+  line('Points', nf(st.n).replace(/ | /g,' '));
+  line('Temps estimé', `env. ${Math.max(1, Math.round(st.min))} min (à ${+$('#speed').value || 700} pts/min)`);
+  line('Fils / coupes', `${res.colors.length} fil${res.colors.length>1?'s':''} · ${st.trims} coupe${st.trims>1?'s':''}`);
+  line('Réglages', `${$('.seg[data-name="fabric"] [aria-pressed="true"]').firstChild.textContent} · densité ${fr(res.P.dens,2)} mm · compensation ${fr(res.P.comp,2)} mm`);
+  if (st.cost != null) line('Coût estimé', `${fr(st.cost,2)} € par pièce`);
+  line('Fichier machine', base() + '.dst');
+  y += 4; doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text('Ordre des fils', 14, y); y += 7; doc.setFontSize(10.5);
+  res.colors.forEach((c,i) => {
+    const [r,g,b] = hex2rgb(c.p.hex);
+    doc.setFillColor(r,g,b); doc.setDrawColor(200); doc.roundedRect(14, y-4.2, 6, 6, 1, 1, 'FD');
+    doc.setFont('helvetica','bold'); doc.text(`${i+1}. ${c.p.name}`, 24, y);
+    doc.setFont('helvetica','normal'); doc.text(S.palette[c.p.i]?.ref || 'réf. à compléter', 90, y); doc.text(nf(c.stitches).replace(/ | /g,' ') + ' pts', 196, y, {align:'right'});
+    y += 8;
+  });
+  if (res.thin.length){ y += 2; doc.setTextColor(198,74,44); doc.setFont('helvetica','bold');
+    doc.text(`Attention : ${res.thin.length} détail(s) de moins de 1 mm, cerclé(s) en rouge sur l'aperçu.`, 14, y); y += 7; }
+  doc.setTextColor(100,109,92); doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.text('Numérisation automatique (PDW) : faire un essai sur chute avant production.', 14, 287);
+  doc.save(base() + '_fiche-broderie.pdf');
+  toast('Fiche technique téléchargée.');
+};
+
+// ============ Lexique ============
+$('#helpBtn').onclick = () => $('#help').classList.remove('hide');
+$('#helpClose').onclick = () => $('#help').classList.add('hide');
+$('#help').onclick = e => e.target.id === 'help' && $('#help').classList.add('hide');
+document.addEventListener('keydown', e => { if (e.key === 'Escape'){ $('#help').classList.add('hide'); setPick(false); } });
+renderResult();
+
+// ============ Auto-tests (console) ============
+(() => {
+  // .DST : chaque déplacement de -121 à 121 doit se relire à l'identique
+  let bad = 0; for (let x=-121;x<=121;x+=1) for (const y of [-121,-80,-41,-40,-14,-13,-5,-4,-2,-1,0,1,2,4,5,13,14,40,41,80,121]){ const [a,b] = dstDec(dstRec(x,y)); if (a!==x || b!==y) bad++; }
+  console.assert(!bad, 'DST : ' + bad + ' déplacements mal codés');
+  // Une forme en U doit donner 2 blocs au moins (les deux branches), un carré un seul
+  const W = 30, H = 30, grid = new Int8Array(W*H).fill(-1);
+  for (let y=5;y<25;y++) for (let x=5;x<25;x++) if (!(x>10 && x<20 && y<20)) grid[y*W+x] = 0;
+  const {comp, regions} = components(grid, W, H);
+  console.assert(regions.length === 1, 'U : ' + regions.length + ' zones');
+  const blocks = toBlocks(scanRows(comp, 0, W, H, regions[0], 0, 1));
+  console.assert(blocks.length >= 2, 'U : blocs ' + blocks.length);
+  const sq = new Int8Array(W*H).fill(-1); for (let y=5;y<25;y++) for (let x=5;x<25;x++) sq[y*W+x] = 0;
+  const c2 = components(sq, W, H); console.assert(toBlocks(scanRows(c2.comp, 0, W, H, c2.regions[0], 0.7, 1)).length === 1, 'carré : plusieurs blocs');
+})();
+</script>
+</body>
+</html>
