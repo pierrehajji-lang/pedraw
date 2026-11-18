@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup t-shirt · PDW</title>
+<link rel="stylesheet" href="../assets/outils.css">
+<script src="../assets/outils.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<style>
+.slots{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.slots .btn{padding:8px 6px;font-size:13.5px}
+.viewer{overflow:hidden;touch-action:none}
+.viewer canvas{display:block;width:100%;height:100%;cursor:grab}
+.viewer canvas:active{cursor:grabbing}
+.shirt-cols{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.shirt-cols .tx{width:30px;height:30px}
+.duo{display:flex;gap:8px;margin-top:12px}
+.duo .btn{flex:1;font-size:13px}
+/* Téléphone : le t-shirt reste en haut de l'écran pendant qu'on règle en dessous */
+@media (max-width:900px){
+  .work{order:-1;position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 16px}
+  .viewer{height:42vh;min-height:240px}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a href="../index.html" class="home" title="Retour à la boîte à outils"><svg class="ic" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg><span class="logo" data-logo="contour"></span></a>
+  <div class="sep"></div>
+  <div>
+    <h1>Le <em>mockup</em></h1>
+    <p>Pose ton design sur un t-shirt en 3D</p>
+  </div>
+  <button class="btn" id="helpBtn" data-ic="info"><span>Comment ça marche ?</span></button>
+</header>
+
+<div class="app">
+<aside class="panel">
+
+  <section class="step">
+    <div class="step-h"><span class="num">1</span><h2>Ton design</h2></div>
+    <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choisir une image">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>
+      <strong>Dépose ton design ici</strong>
+      <span>ou clique pour le choisir · PNG transparent conseillé, ou JPG</span>
+    </div>
+    <div id="fileInfo" class="file hide">
+      <canvas id="thumb" width="112" height="112"></canvas>
+      <div><b id="fname"></b><span id="fpx"></span></div>
+      <button class="btn" id="change">Changer</button>
+    </div>
+    <input type="file" id="file" accept="image/png,image/jpeg,image/webp" hidden>
+  </section>
+
+  <section class="step">
+    <div class="step-h"><span class="num">2</span><h2>L'emplacement</h2></div>
+    <div class="slots" id="slots" role="group" aria-label="Emplacement du design"></div>
+    <p class="hint">La vue tourne toute seule vers l'emplacement choisi. Le cœur est sur la poitrine gauche de la personne qui porte le t-shirt.</p>
+  </section>
+
+  <section class="step">
+    <div class="step-h"><span class="num">3</span><h2>Taille et rotation</h2></div>
+    <div class="range">
+      <div class="range-h"><span>Largeur du design</span><output for="size"></output></div>
+      <input type="range" id="size" min="3" max="40" step="0.5" value="10">
+    </div>
+    <div class="range">
+      <div class="range-h"><span>Rotation</span><output for="rot"></output></div>
+      <input type="range" id="rot" min="-180" max="180" value="0">
+    </div>
+    <div class="range">
+      <div class="range-h"><span>Hauteur<span class="tip" tabindex="0" data-tip="Monte ou descend le design par rapport à sa place habituelle.">?</span></span><output for="dy"></output></div>
+      <input type="range" id="dy" min="-15" max="15" step="0.5" value="0">
+    </div>
+  </section>
+
+  <section class="step">
+    <div class="step-h"><span class="num">4</span><h2>Le t-shirt</h2></div>
+    <div class="shirt-cols" id="cols" role="group" aria-label="Couleur du t-shirt"></div>
+    <div class="duo">
+      <button class="btn" id="reset" data-ic="rotate">Recentrer la vue</button>
+    </div>
+    <div class="run-wrap"><button class="btn primary big" id="export" data-ic="download">Exporter l'image (PNG)</button></div>
+  </section>
+</aside>
+
+<main class="work">
+  <div class="viewer" id="viewer">
+    <div class="viewer-hint">Glisser : tourner · Molette ou pincer : zoomer</div>
+    <div class="busy" id="busy"><div class="spin"></div><span>Chargement du t-shirt…</span></div>
+  </div>
+</main>
+</div>
+
+<div class="modal hide" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="modal-box">
+    <button class="btn icon close" id="helpClose" aria-label="Fermer" data-ic="x"></button>
+    <h2 id="helpTitle">Le petit lexique du mockup</h2>
+    <p>Les mots de l'outil, en une phrase chacun.</p>
+    <div class="gloss">
+      <div><b data-ic="shirt">Mockup</b>Une image qui montre à quoi ressemblera le vêtement imprimé, avant de lancer la production.</div>
+      <div><b data-ic="pin">Cœur / anti-cœur</b>Le <em>cœur</em> est la poitrine gauche de la personne qui porte le t-shirt. L'<em>anti-cœur</em> est l'autre côté.</div>
+      <div><b data-ic="pin">Étiquette du col</b>Le petit marquage imprimé à l'intérieur, derrière la nuque, à la place d'une étiquette cousue.</div>
+      <div><b data-ic="image">PNG transparent</b>Une image dont le fond est vide : seul le dessin se pose sur le tissu. Un JPG garde son fond blanc.</div>
+      <div><b data-ic="rotate">3D</b>Le t-shirt est un volume calculé dans ton navigateur : on le fait tourner pour le voir sous tous les angles.</div>
+      <div><b data-ic="download">Export PNG</b>Enregistre la vue actuelle, fond transparent, prête à poster ou à envoyer au client.</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
+
+// ============ Petits outils ============
+const $ = s => document.querySelector(s);
+let toastT; function toast(t){ const e=$('#toast'); e.textContent=t; e.classList.add('on'); clearTimeout(toastT); toastT=setTimeout(()=>e.classList.remove('on'),4200); }
+const IC = {
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>', x:'<path d="M6 6l12 12M18 6 6 18"/>',
+  download:'<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 17v1.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V17"/>',
+  image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
+  rotate:'<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4h-4"/>',
+  pin:'<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>',
+  shirt:'<path d="M8 3 3 6l2 4 2-1v12h10V9l2 1 2-4-5-3a4 4 0 0 1-8 0z"/>',
+};
+document.querySelectorAll('[data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${IC[el.dataset.ic]}</svg>`));
+
+// ============ Le t-shirt : un volume simple construit en code (pas de fichier 3D externe) ============
+// Unités : 1 = 50 cm (largeur de poitrine d'un t-shirt M).
+const CM = 1 / 50, DEPTH = 0.6;   // DEPTH : le torse est aplati d'avant en arrière
+const viewer = $('#viewer');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+viewer.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 50);
+scene.add(camera, new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(1.5, 2, 3); camera.add(sun);   // la lumière suit la caméra
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.enablePan = false; controls.minDistance = 1.2; controls.maxDistance = 7;
+
+const cloth = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .92, side: THREE.DoubleSide });
+const parts = [];
+const add = geo => { geo.computeVertexNormals(); const m = new THREE.Mesh(geo, cloth); scene.add(m); parts.push(m); return m; };
+
+// Torse : un profil (rayon, hauteur) qu'on fait tourner, puis qu'on aplatit. Le haut finit en col droit.
+const body = new THREE.SplineCurve([[.47,-.8],[.49,-.4],[.5,.1],[.5,.34],[.45,.47],[.34,.55],[.24,.6],[.2,.62]].map(p => new THREE.Vector2(...p))).getPoints(60);
+body.push(new THREE.Vector2(.2, .7));
+const torso = add(new THREE.LatheGeometry(body, 72).scale(1, 1, DEPTH));
+// Bord-côte du col
+add(new THREE.TorusGeometry(.2, .018, 10, 72).rotateX(Math.PI / 2).scale(1, 1, DEPTH).translate(0, .7, 0));
+// Manches : des cônes ouverts, inclinés de 55° vers le bas
+const SLEEVE = {};
+for (const s of [1, -1]){
+  const a = s * 55 * Math.PI / 180, dir = new THREE.Vector3(s * Math.sin(55*Math.PI/180), -Math.cos(55*Math.PI/180), 0);
+  const c = new THREE.Vector3(s * .4, .43, 0).addScaledVector(dir, .2);
+  SLEEVE[s] = { mesh: add(new THREE.CylinderGeometry(.19, .21, .42, 48, 4, true).scale(1, 1, .75).rotateZ(a).translate(c.x, c.y, c.z)), c };
+}
+
+// ============ Les emplacements ============
+// from : d'où l'on « vise » le tissu ; at : le point visé. Le design est projeté à l'endroit touché.
+const front = new THREE.Vector3(0, 0, 1), back = new THREE.Vector3(0, 0, -1);
+const SLOTS = {
+  coeur:     { name: 'Cœur',          at: new THREE.Vector3( .2, .28, 0), from: front, cm: 9 },
+  anticoeur: { name: 'Anti-cœur',     at: new THREE.Vector3(-.2, .28, 0), from: front, cm: 9 },
+  dos:       { name: 'Milieu du dos', at: new THREE.Vector3(0, .1, 0),    from: back,  cm: 28 },
+  mancheG:   { name: 'Manche gauche', at: SLEEVE[1].c,  from: new THREE.Vector3( .8, .45, .4).normalize(), cm: 7, mesh: SLEEVE[1].mesh },
+  mancheD:   { name: 'Manche droite', at: SLEEVE[-1].c, from: new THREE.Vector3(-.8, .45, .4).normalize(), cm: 7, mesh: SLEEVE[-1].mesh },
+  col:       { name: 'Étiquette du col', at: new THREE.Vector3(0, .655, 0), from: front, cm: 5, inside: true },
+};
+// La vue conseillée pour chaque emplacement (position de la caméra)
+const VIEW = { coeur:[.7,.5,3.9], anticoeur:[-.7,.5,3.9], dos:[0,.4,-4], mancheG:[2.4,.7,2.9], mancheD:[-2.4,.7,2.9], col:[0,1.75,.75] };
+const S = { slot: 'coeur', tex: null, aspect: 1, decal: null, goal: null };
+
+$('#slots').innerHTML = Object.entries(SLOTS).map(([k, v]) => `<button class="btn" type="button" data-k="${k}" aria-pressed="${k === S.slot}">${v.name}</button>`).join('');
+$('#slots').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.slot = b.dataset.k;
+  document.querySelectorAll('#slots button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  $('#size').value = SLOTS[S.slot].cm; $('#dy').value = 0;
+  look(S.slot); place();
+};
+
+const ray = new THREE.Raycaster(), helper = new THREE.Object3D();
+function place(){
+  if (S.decal){ scene.remove(S.decal); S.decal.geometry.dispose(); S.decal = null; }
+  outputs();
+  if (!S.tex) return;
+  const sl = SLOTS[S.slot], at = sl.at.clone();
+  at.y += +$('#dy').value * CM;
+  // Étiquette : on vise de l'intérieur du col vers le dos. Sinon : de l'extérieur vers le point.
+  const origin = sl.inside ? at.clone() : at.clone().addScaledVector(sl.from, 3);
+  const dir = sl.inside ? back.clone() : sl.from.clone().negate();
+  ray.set(origin, dir);
+  const hit = ray.intersectObjects(sl.mesh ? [sl.mesh] : parts)[0];
+  if (!hit) return toast('Emplacement introuvable, essaie une autre hauteur.');
+  helper.position.copy(hit.point); helper.lookAt(hit.point.clone().sub(dir));   // le design regarde vers nous
+  helper.rotateZ(-$('#rot').value * Math.PI / 180);
+  const w = +$('#size').value * CM;
+  const geo = new DecalGeometry(hit.object, hit.point, helper.rotation, new THREE.Vector3(w, w / S.aspect, sl.inside ? .1 : .22));
+  S.decal = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: S.tex, transparent: true, roughness: .95, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, side: THREE.DoubleSide }));
+  scene.add(S.decal);
+}
+function outputs(){
+  $('output[for=size]').textContent = (+$('#size').value).toLocaleString('fr-FR') + ' cm';
+  $('output[for=rot]').textContent = $('#rot').value + '°';
+  $('output[for=dy]').textContent = (+$('#dy').value).toLocaleString('fr-FR') + ' cm';
+}
+['size', 'rot', 'dy'].forEach(id => $('#' + id).oninput = place);
+
+// ============ Caméra ============
+function look(k, now){
+  S.goal = new THREE.Vector3(...VIEW[k]);
+  if (now){ camera.position.copy(S.goal); S.goal = null; }
+  controls.target.set(0, k === 'col' ? .55 : -.05, 0);
+}
+controls.addEventListener('start', () => S.goal = null);   // on lâche l'animation dès qu'on touche le t-shirt
+$('#reset').onclick = () => look(S.slot);
+look('coeur', true);
+
+function resize(){
+  const w = viewer.clientWidth, h = viewer.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(viewer); resize();
+renderer.setAnimationLoop(() => {
+  if (S.goal){   // on tourne autour du t-shirt (et pas à travers), par le chemin le plus court
+    const t = controls.target, a = new THREE.Spherical().setFromVector3(camera.position.clone().sub(t)), g = new THREE.Spherical().setFromVector3(S.goal.clone().sub(t));
+    const d = Math.atan2(Math.sin(g.theta - a.theta), Math.cos(g.theta - a.theta));
+    a.theta += d * .12; a.phi += (g.phi - a.phi) * .12; a.radius += (g.radius - a.radius) * .12;
+    camera.position.setFromSpherical(a).add(t);
+    if (camera.position.distanceTo(S.goal) < .01) S.goal = null;
+  }
+  controls.update(); renderer.render(scene, camera);
+});
+$('#busy').classList.add('hide');
+
+// ============ Import du design ============
+$('#drop').onclick = $('#change').onclick = () => $('#file').click();
+$('#drop').onkeydown = e => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), $('#file').click());
+$('#file').onchange = e => e.target.files[0] && loadFile(e.target.files[0]);
+['dragover','dragenter'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); $('#drop').classList.add('over'); }));
+['dragleave','drop'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); $('#drop').classList.remove('over'); }));
+document.addEventListener('drop', e => e.dataTransfer.files[0] && loadFile(e.dataTransfer.files[0]));
+
+async function loadFile(f){
+  if (!/^image\/(png|jpeg|webp)$/.test(f.type)) return toast('Choisis une image PNG, JPG ou WebP.');
+  let img;
+  try { img = await createImageBitmap(f, { imageOrientation: 'flipY' }); }
+  catch { return toast('Impossible de lire cette image.'); }
+  S.tex?.dispose();
+  S.tex = new THREE.Texture(img); S.tex.flipY = false;   // déjà retournée par createImageBitmap
+  S.tex.colorSpace = THREE.SRGBColorSpace; S.tex.anisotropy = 8; S.tex.needsUpdate = true;
+  S.aspect = img.width / img.height;
+  const th = $('#thumb'), c = th.getContext('2d'), k = Math.min(th.width / img.width, th.height / img.height);
+  c.clearRect(0, 0, th.width, th.height);
+  c.save(); c.translate(0, th.height); c.scale(1, -1);   // l'aperçu remis à l'endroit
+  c.drawImage(img, (th.width - img.width*k) / 2, (th.height - img.height*k) / 2, img.width*k, img.height*k); c.restore();
+  $('#fname').textContent = f.name; $('#fpx').textContent = `${img.width} × ${img.height} px` + (f.type === 'image/jpeg' ? ' · JPG : le fond blanc reste visible' : '');
+  $('#drop').classList.add('hide'); $('#fileInfo').classList.remove('hide');
+  place();
+}
+
+// ============ Couleur du t-shirt ============
+const COLS = [['#ffffff','Blanc'],['#111111','Noir'],['#9a9a9a','Gris chiné'],['#1f2a44','Marine'],['#b3261e','Rouge'],['#d9c9a8','Sable'],['#3e5a3a','Kaki']];
+$('#cols').innerHTML = COLS.map(([c, n], i) => `<button class="tx" type="button" style="background:${c}" data-c="${c}" title="${n}" aria-label="${n}" aria-pressed="${!i}"></button>`).join('')
+  + '<label class="tx custom" title="Autre couleur"><input type="color" id="colPick" value="#ffffff" aria-label="Autre couleur"></label>';
+const setCol = (c, el) => { cloth.color.set(c); document.querySelectorAll('#cols .tx').forEach(x => x.setAttribute('aria-pressed', x === el)); };
+$('#cols').onclick = e => { const b = e.target.closest('button'); b && setCol(b.dataset.c, b); };
+$('#colPick').oninput = e => setCol(e.target.value, e.target.parentNode);
+
+// ============ Export ============
+$('#export').onclick = () => renderer.domElement.toBlob(b => {
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(b), download: 'mockup-tshirt.png' });
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}, 'image/png');
+
+$('#helpBtn').onclick = () => $('#help').classList.remove('hide');
+$('#helpClose').onclick = () => $('#help').classList.add('hide');
+$('#help').onclick = e => e.target.id === 'help' && $('#help').classList.add('hide');
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#help').classList.add('hide'); });
+outputs();
+</script>
+</body>
+</html>
