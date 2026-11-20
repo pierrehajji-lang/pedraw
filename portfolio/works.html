@@ -12,7 +12,8 @@
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
-<nav class="nav fixed rise" data-delay="1">
+<header class="top-title"><h1 class="mega drop" data-delay="0.2" id="giant">Projets réalisés</h1></header>
+<nav class="nav rise" data-delay="1">
   <div class="wrap">
     <a class="pill" href="index.html">Accueil</a>
     <a class="pill" href="index.html#info">Info</a>
@@ -23,7 +24,7 @@
   </div>
 </nav>
 <main>
-<section class="page-title"><div class="wrap cols"><h1 class="right rise" data-delay="1">Projets réalisés</h1></div></section>
+<div style="height:120px"></div>
 <section class="wrap">
   <div class="works rise" data-delay="1">
       <a class="card" href="works/recree.html">
@@ -83,5 +84,14 @@
   <p class="mega" aria-hidden="true">Ped<img class="r" src="assets/img/r-rond.png" alt="">aw</p>
 </footer>
 <script src="assets/script.js"></script>
+<script>
+// Grand titre : sa taille s'ajuste pour remplir toute la largeur, comme dans la boîte à outils
+const giant = document.getElementById('giant'), fit = () => {
+  const r = document.createRange(); r.selectNodeContents(giant);
+  giant.style.fontSize = '100px';
+  giant.style.fontSize = 100 * giant.clientWidth / r.getBoundingClientRect().width + 'px';
+};
+fit(); addEventListener('resize', fit); document.fonts.ready.then(fit);
+</script>
 </body>
 </html>
