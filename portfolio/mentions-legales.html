@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pedraw - Mentions légales</title>
+<meta name="description" content="Mentions légales du site Pedraw : éditeur, hébergeur, propriété intellectuelle.">
+<link rel="icon" href="../assets/favicon-pdw.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="top-title"><h1 class="mega drop" data-delay="0.2" id="giant">Mentions légales</h1></header>
+<nav class="nav rise" data-delay="1">
+  <div class="wrap">
+    <a class="pill" href="index.html">Accueil</a>
+    <a class="pill" href="index.html#info">Info</a>
+    <a class="pill" href="works.html">Travaux</a>
+    <a class="pill" href="boutique.html">Boutique</a>
+    <a class="pill" href="../index.html">Outils</a>
+    <a class="pill" href="mailto:pierre.hajji@hotmail.com">Contact</a>
+  </div>
+</nav>
+<main class="legal-page">
+<section class="wrap cols rise"><h2 class="label op7">Éditeur du site</h2><div class="txt"><p>Le site pedraw (portfolio, boutique et boîte à outils) est édité par Pierre Hajji, <span class="todo">[à compléter]</span> (statut : particulier, ou entrepreneur individuel avec son numéro SIRET).</p><p>Adresse : <span class="todo">[à compléter]</span></p><p>Email : <a href="mailto:pierre.hajji@hotmail.com">pierre.hajji@hotmail.com</a></p><p>Directeur de la publication : Pierre Hajji.</p></div></section>
+<section class="wrap cols rise"><h2 class="label op7">Hébergeur</h2><div class="txt"><p>GitHub, Inc. (service GitHub Pages), 88 Colin P. Kelly Jr. Street, San Francisco, CA 94107, États-Unis. <a href="https://github.com" target="_blank" rel="noopener">github.com</a></p></div></section>
+<section class="wrap cols rise"><h2 class="label op7">Propriété intellectuelle</h2><div class="txt"><p>Les visuels, illustrations, photos, vidéos, textes, logos et la marque Pedraw présents sur ce site sont la propriété de Pierre Hajji, sauf mention contraire. Les projets réalisés pour des clients restent soumis aux droits convenus avec eux.</p><p>Toute reproduction, modification ou réutilisation, même partielle, sans accord écrit est interdite.</p></div></section>
+<section class="wrap cols rise"><h2 class="label op7">Outils en ligne</h2><div class="txt"><p>Les outils (séparateur, brodeur, textureur, gribouilleur, mockup) sont fournis gratuitement, tels quels, sans garantie. Les fichiers que tu y ouvres restent sur ton appareil : ils ne sont jamais envoyés sur un serveur.</p></div></section>
+<section class="wrap cols rise"><h2 class="label op7">Données personnelles</h2><div class="txt"><p>Tout est expliqué dans la <a href="confidentialite.html">politique de confidentialité</a>.</p></div></section>
+<p class="wrap cols"><span class="right label op7">Dernière mise à jour : 21 novembre 2026</span></p>
+</main>
+<footer class="footer">
+  <div class="wrap social">
+    <a href="https://www.instagram.com/pedraw_graph/" target="_blank" rel="noopener">INSTA <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 8L8 2M3 2h5v5" stroke="currentColor" stroke-width="1.2" fill="none"/></svg></a>
+    <a href="https://www.linkedin.com/in/pierre-hajji-38a834296/" target="_blank" rel="noopener">LNKDN <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 8L8 2M3 2h5v5" stroke="currentColor" stroke-width="1.2" fill="none"/></svg></a>
+    <a href="https://www.behance.net/" target="_blank" rel="noopener">Bē <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 8L8 2M3 2h5v5" stroke="currentColor" stroke-width="1.2" fill="none"/></svg></a>
+  </div>
+  <div class="wrap legal-links"><a href="mentions-legales.html">Mentions légales</a><a href="confidentialite.html">Confidentialité</a></div>
+  <p class="mega" aria-hidden="true">Ped<img class="r" src="assets/img/r-rond.png" alt="">aw</p>
+</footer>
+<script src="assets/script.js?v=2"></script>
+<script>
+// Grand titre : sa taille s'ajuste pour remplir toute la largeur, comme dans la boîte à outils
+const fit = () => ['giant'].forEach((id) => {
+  const el = document.getElementById(id), r = document.createRange(); r.selectNodeContents(el);
+  el.style.fontSize = '100px';
+  el.style.fontSize = 100 * el.clientWidth / r.getBoundingClientRect().width + 'px';
+});
+fit(); addEventListener('resize', fit); document.fonts.ready.then(fit);
+</script>
+</body>
+</html>
