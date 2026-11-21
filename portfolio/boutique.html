@@ -10,6 +10,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css?v=2">
+<style>
+/* Dégradé noir → blanc jusqu'au footer, « Bientôt dispo » dans le blanc */
+.soon { min-height: 160vh; background: linear-gradient(#000 0%, #fff 85%); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 12vh; }
+.soon p { color: #000; font-size: clamp(32px, 8vw, 120px); font-weight: 700; text-transform: uppercase; letter-spacing: -0.02em; text-align: center; }
+</style>
 </head>
 <body>
 <header class="top-title"><h1 class="mega drop" data-delay="0.2" id="giant">Boutique</h1></header>
@@ -23,40 +28,8 @@
     <a class="pill" href="mailto:pierre.hajji@hotmail.com">Contact</a>
   </div>
 </nav>
-<main>
-<section class="intro">
-  <div class="wrap cols"><div class="right txt rise" data-delay="1.2"><p><strong>Bientôt disponible.</strong> Sérigraphies, broderies et illustrations faites à la main dans l'atelier. Les pièces et les prix ci-dessous sont provisoires.</p></div></div>
-</section>
-<section class="wrap">
-  <div class="works rise" data-delay="1.4">
-      <div class="card">
-        <div class="card-head"><h3>Affiche sérigraphiée</h3><div class="tags"><span class="tag">35 €</span><span class="tag">Bientôt</span></div></div>
-        <div class="thumb"><img src="../assets/vignettes/serigraphie.jpg" alt="Affiche sérigraphiée" loading="lazy"><span class="see">Bientôt disponible</span></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h3>Casquette brodée</h3><div class="tags"><span class="tag">30 €</span><span class="tag">Bientôt</span></div></div>
-        <div class="thumb"><img src="../assets/vignettes/broderie.jpg" alt="Casquette brodée" loading="lazy"><span class="see">Bientôt disponible</span></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h3>Print illustration</h3><div class="tags"><span class="tag">20 €</span><span class="tag">Bientôt</span></div></div>
-        <div class="thumb"><img src="../assets/vignettes/gribouille.gif" alt="Print illustration" loading="lazy"><span class="see">Bientôt disponible</span></div>
-      </div>
-  </div>
-</section>
-<section class="cta">
-  <div class="wrap cols">
-    <div class="right rise">
-      <div class="txt">
-        <p>La boutique ouvre bientôt.</p>
-        <p>Une pièce te fait envie, ou tu veux une commande sur mesure ? Écris-moi.</p>
-      </div>
-      <div class="buttons">
-        <a class="btn-mail" href="mailto:pierre.hajji@hotmail.com">pierre.hajji@hotmail.com</a>
-        <button class="btn-copy" type="button" data-email="pierre.hajji@hotmail.com"><svg viewBox="0 0 14 14" aria-hidden="true"><rect x="4.5" y="4.5" width="8" height="8" fill="none" stroke="currentColor"/><path d="M9.5 2.5V1.5h-8v8h1" fill="none" stroke="currentColor"/></svg><span>Copier l'email</span></button>
-      </div>
-    </div>
-  </div>
-</section>
+<main class="soon">
+  <p class="rise" data-delay="1.2">Bientôt dispo</p>
 </main>
 <footer class="footer">
   <div class="wrap social">
