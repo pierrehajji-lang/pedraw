@@ -25,24 +25,39 @@ if (intro) {
   // Écran en hauteur (téléphone) : vidéo verticale ; sinon vidéo horizontale.
   const v = intro.querySelector('video');
   const tall = matchMedia('(orientation: portrait)').matches;
-  v.poster = tall ? 'assets/img/intro-poster-mobile.jpg' : 'assets/img/intro-poster.jpg';
-  v.src = tall ? 'assets/intro-mobile.mp4' : 'assets/intro.mp4';
-  const dimTimer = setTimeout(() => intro.classList.add('dim'), 3000);
+  // data-src / data-poster = chemin sans « -mobile » ni extension (accueil et pages projet)
+  const end = tall ? '-mobile' : '';
+  v.poster = intro.dataset.poster + end + '.jpg';
+  v.src = intro.dataset.src + end + '.mp4';
+  // Pages projet : le nom du projet remplit toute la largeur, quelle que soit sa longueur.
+  const fitTitle = intro.querySelector('.mega.fit');
+  if (fitTitle) {
+    const fit = () => {
+      const r = document.createRange(); r.selectNodeContents(fitTitle);
+      fitTitle.style.fontSize = '100px';
+      // limité à 60 % de la hauteur d'écran pour les noms courts (TIF)
+      fitTitle.style.fontSize = Math.min(100 * fitTitle.clientWidth / r.getBoundingClientRect().width, innerHeight * 0.6) + 'px';
+    };
+    fit(); addEventListener('resize', fit); document.fonts.ready.then(fit);
+  }
+  const dimTimer = setTimeout(() => intro.classList.add('dim'), (intro.dataset.dim || 3) * 1000); // data-dim : délai en secondes
   const leave = () => {
     if (intro.classList.contains('out')) return;
     clearTimeout(dimTimer);
     // Un seul titre à l'écran : celui de la vidéo glisse à la place de celui de la page, caché en attendant.
     const pageTitle = document.querySelector('.top-title .mega');
     const introTitle = intro.querySelector('.mega');
-    pageTitle.classList.remove('drop');
-    pageTitle.style.visibility = 'hidden';
-    const dy = pageTitle.getBoundingClientRect().top - introTitle.getBoundingClientRect().top;
-    const now = new DOMMatrix(getComputedStyle(introTitle).transform).m42; // position actuelle (si le titre montait encore)
-    introTitle.style.transform = `translateY(${now + dy}px)`;
+    if (pageTitle) {
+      pageTitle.classList.remove('drop');
+      pageTitle.style.visibility = 'hidden';
+      const dy = pageTitle.getBoundingClientRect().top - introTitle.getBoundingClientRect().top;
+      const now = new DOMMatrix(getComputedStyle(introTitle).transform).m42; // position actuelle (si le titre montait encore)
+      introTitle.style.transform = `translateY(${now + dy}px)`;
+    } else introTitle.style.transform = `translateY(${-innerHeight}px)`; // page projet : le titre remonte et sort de l'écran
     intro.classList.add('out');
     document.documentElement.classList.remove('intro-lock');
     startPage();
-    setTimeout(() => { pageTitle.style.visibility = ''; intro.remove(); }, 1000); // fin du glissement
+    setTimeout(() => { if (pageTitle) pageTitle.style.visibility = ''; intro.remove(); }, 1000); // fin du glissement
   };
   addEventListener('wheel', leave, { passive: true });
   addEventListener('touchmove', leave, { passive: true });

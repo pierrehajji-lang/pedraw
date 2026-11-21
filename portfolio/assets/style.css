@@ -274,3 +274,6 @@ img { display: block; max-width: 100%; }
 .intro-video.out .intro-title { overflow: visible; }
 .intro-video.out .intro-title .mega { transition: transform 1s var(--ease); transition-delay: 0s; }
 html.intro-lock, html.intro-lock body { overflow: hidden; }
+/* Pages projet : voile léger sans flou pour garder le mouvement visible, titre plus tôt */
+.intro-video.light.dim::after { background: rgba(0, 0, 0, 0.3); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.intro-video.light.dim .intro-title .mega { transition-delay: 0.2s; }

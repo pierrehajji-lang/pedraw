@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Motion projet</title>
+<style>body{margin:0;background:#111;display:grid;place-items:center;min-height:100vh}canvas{max-width:100vw;max-height:100vh;background:#000}</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// Motion d'intro d'un projet, dessiné image par image.
+// Aperçu : motion.html?p=tif (ordinateur) ou motion.html?p=tif&f=v (téléphone)
+// 11 s en boucle : colonnes qui défilent, puis 4 grandes images du projet une par une.
+const q = new URLSearchParams(location.search);
+const P = q.get('p') || 'tif', V = q.get('f') === 'v';
+const W = V ? 1080 : 1920, H = V ? 1920 : 1080, DUR = 11, FPS = 30;
+const c = document.getElementById('c'); c.width = W; c.height = H;
+const ctx = c.getContext('2d');
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, a, d) => clamp((t - a) / d);
+const eOut = x => x >= 1 ? 1 : 1 - Math.pow(2, -10 * x);
+const eIn = x => x <= 0 ? 0 : Math.pow(2, 10 * x - 10);
+const eIO = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const rnd = i => { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }; // hasard fixe
+let IMG = [];
+const im = k => IMG[((k % IMG.length) + IMG.length) % IMG.length];
+function cover(img, x, y, w, h, z = 1) {
+  const r = Math.max(w / img.width, h / img.height) * z, iw = img.width * r, ih = img.height * r;
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih); ctx.restore();
+}
+const reset = () => { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; };
+
+// 1) Colonnes d'images qui entrent tour à tour puis défilent en sens opposés, et accélèrent sous le premier volet.
+function columns(t) {
+  const n = V ? 3 : 5, gap = V ? 12 : 16, cw = (W - gap * (n + 1)) / n, ch = cw * 1.3;
+  const zoom = 1 + .5 * eIn(prog(t, 1.9, .6));
+  ctx.translate(W / 2, H / 2); ctx.scale(zoom, zoom); ctx.translate(-W / 2, -H / 2);
+  for (let j = 0; j < n; j++) {
+    const dir = j % 2 ? 1 : -1, x = gap + j * (cw + gap);
+    const open = eOut(prog(t, .05 + j * .09, .8));
+    const top = dir > 0 ? 0 : H * (1 - open), bot = dir > 0 ? H * open : H;
+    const speed = 180 + 900 * eIn(prog(t, 1.6, .9));
+    const off = (dir * (t * speed + (1 - open) * 600) + j * 173) % (ch + gap);
+    ctx.save(); ctx.beginPath(); ctx.rect(x, top, cw, bot - top); ctx.clip();
+    for (let r = -2; r < H / (ch + gap) + 2; r++) cover(im(j * 3 + r + 10), x, off + r * (ch + gap), cw, ch, 1.05);
+    ctx.restore();
+  }
+  reset();
+}
+
+// 2) Vitrine : 4 grandes images du projet, chacune monte par un volet et reste 2 s avec un zoom lent.
+const SH = 2.2, SD = 2, SN = 4;
+function showcase(t) {
+  for (let k = 0; k < SN; k++) {
+    const s0 = SH + k * SD, p = eIO(prog(t, s0, .8));
+    if (p <= 0) break;
+    const top = H * (1 - p), z = 1.14 - .14 * prog(t, s0, SD + .8), dy = (1 - p) * H * .2;
+    ctx.save(); ctx.beginPath(); ctx.rect(0, top, W, H - top); ctx.clip();
+    ctx.translate(0, dy); cover(im(k), 0, 0, W, H, z);
+    ctx.restore();
+    if (p < 1) { ctx.fillStyle = '#fff'; ctx.fillRect(0, top - 2, W, 3); } // fin trait blanc sur le bord du volet
+  }
+  // retour au noir par un dernier volet, pour reboucler sur les colonnes
+  const e = eIO(prog(t, DUR - .8, .8));
+  if (e > 0) { ctx.fillStyle = '#000'; ctx.fillRect(0, H * (1 - e), W, H * e + 1); }
+}
+
+// grain léger (fixe, décalé à chaque image)
+const grain = document.createElement('canvas'); grain.width = grain.height = 256;
+{ const g = grain.getContext('2d'), d = g.createImageData(256, 256); let sd = 7;
+  for (let i = 0; i < d.data.length; i += 4) { sd = (sd * 16807) % 2147483647; const v = sd / 2147483647 * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; }
+  g.putImageData(d, 0, 0); }
+
+function draw(t) {
+  reset(); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  if (t < 3.1) columns(t);
+  showcase(t);
+  reset();
+  const f = Math.floor(t * FPS);
+  ctx.globalAlpha = .07; ctx.globalCompositeOperation = 'overlay';
+  ctx.fillStyle = ctx.createPattern(grain, 'repeat');
+  ctx.translate((f * 97) % 256, (f * 53) % 256); ctx.fillRect(-256, -256, W + 512, H + 512);
+  reset();
+}
+
+// Images : celles de la page du projet (avant « Projet suivant »)
+window.ready = fetch(`../../works/${P}.html`).then(r => r.text()).then(s => {
+  s = s.slice(0, s.indexOf('class="next'));
+  const names = [...new Set([...s.matchAll(/assets\/img\/([^"]+\.(?:png|jpg))/g)].map(m => m[1]))];
+  return Promise.all(names.map(n => new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = `../img/${n}`; })));
+}).then(list => { IMG = list; });
+
+// Rendu : envoie chaque image au petit serveur local (faire-videos.sh), sinon aperçu en boucle.
+window.render = async () => {
+  await window.ready;
+  for (let f = 0; f < DUR * FPS; f++) {
+    draw(f / FPS);
+    const blob = await new Promise(ok => c.toBlob(ok, 'image/jpeg', .92));
+    await fetch(`/frame?n=${f}&d=${q.get("d") || ""}`, {method: "POST", body: blob});
+  }
+  return 'ok';
+};
+if (!q.has('render')) window.ready.then(() => { const s = performance.now(); const loop = now => { draw(((now - s) / 1000) % DUR); requestAnimationFrame(loop); }; requestAnimationFrame(loop); });
+</script>
+</body>
+</html>
