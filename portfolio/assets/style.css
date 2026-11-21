@@ -92,14 +92,6 @@ img { display: block; max-width: 100%; }
 }
 .card:hover .see { opacity: 1; }
 
-/* ---------- Bandeau de logos ---------- */
-.logos { padding: 48px 0; overflow: hidden; }
-.logos-track { display: flex; width: max-content; animation: defile 30s linear infinite; }
-.logos-set { display: flex; align-items: center; gap: 100px; padding: 0 50px; }
-.logos-set img { height: 40px; width: 92px; object-fit: contain; }
-.logos-set img.wide { width: 102px; }
-.logos-set img.tall { height: 44px; width: 52px; }
-@keyframes defile { to { transform: translateX(-50%); } }
 
 /* ---------- À propos ---------- */
 .about { padding-top: 100px; }
@@ -252,7 +244,6 @@ img { display: block; max-width: 100%; }
   .next { padding: 160px 0 120px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .logos-track { animation: none; }
   .js .rise, .js .drop { opacity: 1; transform: none; }
 }
 
