@@ -139,9 +139,9 @@
     </div>
     <div class="lbl">Format</div>
     <div class="seg" data-name="format">
-      <button data-v="800x800" aria-pressed="true">Carré<small>800 × 800</small></button>
-      <button data-v="720x900" aria-pressed="false">Portrait<small>720 × 900</small></button>
-      <button data-v="960x600" aria-pressed="false">Paysage<small>960 × 600</small></button>
+      <button data-v="1080x1080" aria-pressed="true">Carré<small>1080 × 1080</small></button>
+      <button data-v="1080x1350" aria-pressed="false">Portrait<small>1080 × 1350</small></button>
+      <button data-v="1080x1920" aria-pressed="false">Story<small>1080 × 1920</small></button>
     </div>
     <div class="row">
       <span><b>Fond</b><span class="tip" tabindex="0" data-tip="La couleur derrière le dessin. Pour un marquage textile, coche « transparent » : seul le dessin sera exporté.">?</span></span>
@@ -289,7 +289,7 @@ $$('[data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', ic(el.dataset.
 // ============ Le document ============
 // Un trait = { f: image, b: pinceau, c: couleur, s: épaisseur, p: [x,y,w, x,y,w…], seed }. Tout est vectoriel :
 // on peut le redessiner à n'importe quelle taille et avec un autre tremblement.
-const doc = { W:800, H:800, bg:'#ffffff', transp:false, amp:2.5, fps:8, hold:2, frames:1,
+const doc = { W:1080, H:1080, bg:'#ffffff', transp:false, amp:2.5, fps:8, hold:2, frames:1,
   layers:[{ name:'Calque 1', on:true, strokes:[] }] };
 let F = 0, act = 0, K = 0;   // image affichée, calque actif, tremblement en cours (0, 1 ou 2)
 const BOIL = 3;               // nombre de versions décalées de chaque trait
@@ -582,7 +582,7 @@ $('#imgFile').onchange = e => {
   if (!f.type.startsWith('image/')) return toast('Ce fichier n\'est pas une image (PNG, JPG, WebP…).');
   const im = new Image(); im.onerror = () => toast('Impossible de lire cette image.');
   im.onload = () => {   // réduite et intégrée au projet (data URL), pour rester exportable même ouverte par double-clic
-    const k = Math.min(1, 1600/Math.max(im.width, im.height)), c = mk(im.width*k, im.height*k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+    const k = Math.min(1, 2048/Math.max(im.width, im.height)), c = mk(im.width*k, im.height*k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
     const z = Math.min(doc.W/c.width, doc.H/c.height), w = c.width*z, h = c.height*z;
     push(); doc.layers.splice(act, 0, { name: f.name.replace(/\.[^.]+$/, '').slice(0, 30), on:true, strokes:[], img: c.toDataURL('image/png'), x:(doc.W-w)/2, y:(doc.H-h)/2, w, h });
     act++; renderLayers(); dirtyAll(); URL.revokeObjectURL(im.src); toast('Image posée sous ton calque : décalque-la, puis masque-la avec l\'œil.');
@@ -626,7 +626,7 @@ window.addEventListener('resize', sizeCanvas);
 const gcd = (a, b) => b ? gcd(b, a % b) : a;
 const loopLen = () => { const n = doc.frames > 1 ? doc.frames*doc.hold : 1; return n*BOIL/gcd(n, BOIL); };   // boucle sans à-coup
 const seq = () => Array.from({length:loopLen()}, (_, t) => [doc.frames > 1 ? Math.floor(t/doc.hold) % doc.frames : F, t % BOIL]);
-function scaleUI(){ [1,2,3].forEach(s => $('#s'+s).textContent = `${doc.W*s} px`); }
+function scaleUI(){ [1,2,3].forEach(s => $("#s"+s).textContent = `${doc.W*s} × ${doc.H*s}`); }
 const FMT_HINT = {
   gif: () => `Une boucle de ${loopLen()} images, lue partout. ${doc.transp ? 'Fond transparent : les bords des traits seront un peu crénelés (le GIF ne connaît pas la demi-transparence).' : ''}`,
   png: () => 'L\'image en cours, sans mouvement. ' + (doc.transp ? 'Fond transparent : prête pour un marquage textile.' : 'Coche « fond transparent » pour un fichier d\'impression.'),
