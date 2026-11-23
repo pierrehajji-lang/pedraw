@@ -29,6 +29,10 @@ if (intro) {
   const end = tall ? '-mobile' : '';
   v.poster = intro.dataset.poster + end + '.jpg';
   v.src = intro.dataset.src + end + '.mp4';
+  // Pas de commandes du lecteur sur téléphone (ni plein écran, ni image dans l'image, ni AirPlay)
+  v.controls = false; v.disablePictureInPicture = true; v.disableRemotePlayback = true;
+  v.setAttribute('controlslist', 'nodownload nofullscreen noremoteplayback');
+  v.play().catch(() => {}); // mode économie d'énergie : la lecture est refusée, l'image fixe reste affichée
   // Pages projet : le nom du projet remplit toute la largeur, quelle que soit sa longueur.
   const fitTitle = intro.querySelector('.mega.fit');
   if (fitTitle) {

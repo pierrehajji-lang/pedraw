@@ -253,6 +253,12 @@ img { display: block; max-width: 100%; }
   transition: transform 1s var(--ease), opacity 1s var(--ease);
 }
 .intro-video video { width: 100%; height: 100%; object-fit: cover; }
+/* Téléphone : aucun bouton du lecteur (lecture, avance de 10 s, plein écran…) par-dessus la vidéo */
+.intro-video video { pointer-events: none; }
+.intro-video video::-webkit-media-controls,
+.intro-video video::-webkit-media-controls-panel,
+.intro-video video::-webkit-media-controls-overlay-play-button,
+.intro-video video::-webkit-media-controls-start-playback-button { display: none !important; -webkit-appearance: none; }
 /* Téléphone : la vidéo verticale est montrée en entier (bandes noires si l'écran est plus allongé) */
 @media (orientation: portrait) { .intro-video video { object-fit: contain; } }
 /* Voile noir + flou : commence à 3 s (classe .dim) et est complet vers 5 s */
