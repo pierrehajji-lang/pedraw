@@ -14,6 +14,10 @@
 /* Dégradé noir → blanc jusqu'au footer, « Bientôt dispo » dans le blanc */
 .soon { min-height: 160vh; background: linear-gradient(#000 0%, #fff 85%); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 12vh; }
 .soon p { color: #000; font-size: clamp(32px, 8vw, 120px); font-weight: 700; text-transform: uppercase; letter-spacing: -0.02em; text-align: center; }
+/* La page finit en blanc : le pied de page aussi */
+.nav.on-light { --fg: #000; --pill: rgba(0, 0, 0, 0.16); color: #000; }
+.footer { --fg: #000; background: #fff; color: #000; }
+.footer .mega .r { filter: contrast(1.3) invert(1); }
 </style>
 </head>
 <body>
@@ -48,6 +52,13 @@ const giant = document.getElementById('giant'), fit = () => {
   giant.style.fontSize = 100 * giant.clientWidth / r.getBoundingClientRect().width + 'px';
 };
 fit(); addEventListener('resize', fit); document.fonts.ready.then(fit);
+// Menu noir dès que le dégradé derrière lui devient clair (blanc à 85 % de la hauteur)
+const nav = document.querySelector('.nav'), soon = document.querySelector('.soon');
+const tint = () => {
+  const b = soon.getBoundingClientRect(), n = nav.getBoundingClientRect();
+  nav.classList.toggle('on-light', (n.top + n.height / 2 - b.top) / (b.height * 0.85) > 0.46);
+};
+tint(); addEventListener('scroll', tint, { passive: true }); addEventListener('resize', tint);
 </script>
 </body>
 </html>
