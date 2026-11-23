@@ -63,9 +63,15 @@ img { display: block; max-width: 100%; }
 .pill:hover, .pill.current { border-color: var(--fg); }
 
 /* ---------- Accueil : intro ---------- */
-.intro { padding: 200px 0 100px; }
-.intro .txt { max-width: 560px; }
-.intro strong { font-weight: 700; }
+.intro { padding: 44px 0 120px; }
+.hello { display: flex; align-items: center; gap: 12px; align-self: start; font-size: 20px; line-height: 24px; }
+.hello img { width: 48px; height: 48px; object-fit: cover; border-radius: 50%; }
+.accroche { font-size: clamp(30px, 2.9vw, 54px); line-height: 1.1; font-weight: 500; letter-spacing: -0.015em; text-wrap: balance; }
+.offre { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--gap); margin-top: 72px; }
+.offre li { border-top: 1px solid rgba(255, 255, 255, 0.3); padding-top: 14px; }
+.offre h2 { font-size: 20px; line-height: 24px; font-weight: 600; margin-bottom: 6px; }
+.offre p { font-size: 16px; line-height: 20px; color: var(--dim); max-width: 30ch; }
+@media (max-width: 809.98px) { .offre { grid-template-columns: 1fr 1fr; row-gap: 32px; margin-top: 56px; } }
 
 /* ---------- Cartes projets ---------- */
 .works { display: grid; grid-template-columns: 1fr 1fr; column-gap: var(--gap); row-gap: 60px; }
@@ -223,7 +229,7 @@ img { display: block; max-width: 100%; }
   .cols > .right { grid-column: 1; }
   .pill { padding: 4px 4px; border-color: transparent; }
   .pill.current { border-color: var(--pill); padding: 4px 8px; }
-  .intro { padding: 300px 0 100px; }
+  .intro { padding: 56px 0 80px; }
   .works { grid-template-columns: 1fr; }
   .card-head h3 { flex: 1; }
   .thumb { aspect-ratio: 351 / 260; }
