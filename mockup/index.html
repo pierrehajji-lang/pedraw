@@ -26,7 +26,16 @@
 <style>
 .slots{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .slots .btn{padding:8px 6px;font-size:13.5px}
-.viewer{overflow:hidden;touch-action:none}
+/* point = cet emplacement a déjà un design */
+.slots .btn.has::after{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-left:6px;vertical-align:middle}
+.viewer{overflow:hidden;touch-action:none;position:relative}
+/* « + » noir en relief posé sur chaque zone du t-shirt */
+.pin{position:absolute;left:0;top:0;z-index:2;width:30px;height:30px;border-radius:50%;border:2px solid #fff;background:#111;color:#fff;font:600 20px/1 sans-serif;display:grid;place-items:center;padding:0 0 2px;cursor:pointer;box-shadow:0 3px 0 #000,0 6px 14px rgba(0,0,0,.45);transition:width .2s,height .2s,box-shadow .2s}
+.pin:hover{box-shadow:0 1px 0 #000,0 3px 8px rgba(0,0,0,.45)}
+.pin.on{width:36px;height:36px;outline:3px solid rgba(255,255,255,.5)}
+.pin[hidden]{display:none}
+.preview-btn{position:absolute;top:12px;left:12px;z-index:3}
+.preview-btn[aria-pressed=true]{background:var(--ink);color:var(--bg)}
 .viewer canvas{display:block;width:100%;height:100%;cursor:grab}
 .viewer canvas:active{cursor:grabbing}
 .shirt-cols{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -68,8 +77,10 @@
       <canvas id="thumb" width="112" height="112"></canvas>
       <div><b id="fname"></b><span id="fpx"></span></div>
       <button class="btn" id="change">Changer</button>
+      <button class="btn" id="remove">Retirer</button>
     </div>
-    <input type="file" id="file" accept="image/png,image/jpeg,image/webp" hidden>
+    <input type="file" id="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+    <p class="hint">Un design par emplacement. Tu peux en déposer plusieurs d'un coup : le premier va sur l'emplacement choisi, les autres sur les emplacements libres.</p>
   </section>
 
   <section class="step">
@@ -108,6 +119,7 @@
 <main class="work">
   <div class="viewer" id="viewer">
     <div class="viewer-hint">Glisser : tourner · Molette ou pincer : zoomer</div>
+    <button class="btn preview-btn" id="preview" type="button" aria-pressed="false" data-ic="eye">Aperçu</button>
     <div class="busy" id="busy"><div class="spin"></div><span>Chargement du t-shirt…</span></div>
   </div>
 </main>
@@ -156,6 +168,7 @@ const IC = {
   image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
   rotate:'<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4h-4"/>',
   pin:'<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>',
+  eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   shirt:'<path d="M8 3 3 6l2 4 2-1v12h10V9l2 1 2-4-5-3a4 4 0 0 1-8 0z"/>',
 };
 document.querySelectorAll('[data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${IC[el.dataset.ic]}</svg>`));
@@ -242,7 +255,7 @@ new GLTFLoader().setDRACOLoader(draco).load('tshirt.glb', g => {
   });
   scene.add(g.scene); g.scene.updateMatrixWorld(true);
   SLOTS.mancheG.mesh = SLOTS.mancheD.mesh = SLOTS.col.mesh = shirt;
-  $('#busy').classList.add('hide'); place();
+  $('#busy').classList.add('hide'); pinAnchors(); Object.keys(D).forEach(k => place(k));
 }, undefined, () => { $('#busy').classList.add('hide'); toast('Impossible de charger le t-shirt 3D. Recharge la page.'); });
 
 // ============ Les emplacements ============
@@ -251,37 +264,55 @@ const front = V(0, 0, 1), back = V(0, 0, -1);
 const SLOTS = {
   coeur:     { name: 'Cœur',          at: V( .18, .21, 0), from: front, cm: 9 },
   anticoeur: { name: 'Anti-cœur',     at: V(-.18, .21, 0), from: front, cm: 9 },
-  dos:       { name: 'Milieu du dos', at: V(0, .05, 0),  from: back,  cm: 28 },
+  devant:    { name: 'Milieu devant', at: V(0, .05, 0),  from: front, cm: 26 },
+  basDevant: { name: 'Bas devant',    at: V(0, -.5, 0),  from: front, cm: 14 },
+  dos:      { name: 'Milieu du dos', at: V(0, .05, 0),  from: back,  cm: 28 },
   mancheG:   { name: 'Manche gauche', at: V( .45, .25, 0), from: V( 1, .25, .15).normalize(), cm: 7, depth: .14 },
   mancheD:   { name: 'Manche droite', at: V(-.45, .25, 0), from: V(-1, .25, .15).normalize(), cm: 7, depth: .14 },
   col:       { name: 'Étiquette du col', at: V(0, TOP - .05, 0), from: front, cm: 4, inside: true, depth: .06 },   // sous le col, à l'intérieur du dos
 };
 // La vue conseillée pour chaque emplacement (position de la caméra)
-const VIEW = { coeur:[.6,.4,3.6], anticoeur:[-.6,.4,3.6], dos:[0,.35,-3.7], mancheG:[2.3,.6,2.6], mancheD:[-2.3,.6,2.6], col:[0,1.45,.9] };
-const S = { slot: 'coeur', tex: null, aspect: 1, decal: null, goal: null };
+const VIEW = { coeur:[.6,.4,3.6], anticoeur:[-.6,.4,3.6], devant:[0,.3,3.7], basDevant:[0,-.2,3.6], dos:[0,.35,-3.7], mancheG:[2.3,.6,2.6], mancheD:[-2.3,.6,2.6], col:[0,1.45,.9] };
+const S = { slot: 'coeur', goal: null };
+// Un design par emplacement : { tex, img, aspect, name, info, size, rot, dy, decal }
+const D = {};
 
 $('#slots').innerHTML = Object.entries(SLOTS).map(([k, v]) => `<button class="btn" type="button" data-k="${k}" aria-pressed="${k === S.slot}">${v.name}</button>`).join('');
-$('#slots').onclick = e => {
-  const b = e.target.closest('button'); if (!b) return;
-  S.slot = b.dataset.k;
-  document.querySelectorAll('#slots button').forEach(x => x.setAttribute('aria-pressed', x === b));
-  $('#size').value = SLOTS[S.slot].cm; $('#dy').value = 0;
-  look(S.slot); place();
-};
+$('#slots').onclick = e => { const b = e.target.closest('button'); b && select(b.dataset.k); };
+function select(k){
+  S.slot = k;
+  document.querySelectorAll('#slots button').forEach(x => x.setAttribute('aria-pressed', x.dataset.k === k));
+  const d = D[k];
+  $('#size').value = d ? d.size : SLOTS[k].cm; $('#rot').value = d ? d.rot : 0; $('#dy').value = d ? d.dy : 0;
+  outputs(); showFile(); look(k);
+}
 
 const ray = new THREE.Raycaster(), helper = new THREE.Object3D();
-function place(){
-  if (S.decal){ scene.remove(S.decal); S.decal.geometry.dispose(); S.decal = null; }
-  outputs();
-  if (!S.tex || !shirt) return;
-  const sl = SLOTS[S.slot], at = sl.at.clone();
-  at.y += +$('#dy').value * CM;
+function place(k = S.slot){
+  const d = D[k];
+  if (d?.decal){ scene.remove(d.decal); d.decal.geometry.dispose(); d.decal.material.dispose(); d.decal = null; }
+  if (!d || !shirt) return;
+  const a = aim(k, d.dy);
+  if (!a) return toast('Emplacement introuvable, essaie une autre hauteur.');
+  const { hit, n } = a, sl = SLOTS[k];
+  helper.position.copy(hit.point); helper.lookAt(hit.point.clone().add(n));   // le design regarde vers l'extérieur du tissu
+  helper.rotateZ(-d.rot * Math.PI / 180);
+  const w = d.size * CM;
+  const geo = new DecalGeometry(hit.object, hit.point, helper.rotation, new THREE.Vector3(w, w / d.aspect, sl.depth ?? .22));
+  // l'encre prend le grain de la maille (même carreau de 1,5 cm que le tissu)
+  d.decal = new THREE.Mesh(geo, new THREE.MeshPhysicalMaterial({ map: d.tex, transparent: true, roughness: .8, sheen: .2, normalMap: knit(w / (1.5*CM), w / d.aspect / (1.5*CM)), normalScale: new THREE.Vector2(.5, .5), depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, side: THREE.DoubleSide }));
+  d.decal.receiveShadow = true; scene.add(d.decal);
+}
+// Le point du tissu visé pour un emplacement (décalé de dy cm), et la normale du tissu à cet endroit
+function aim(k, dy){
+  const sl = SLOTS[k], at = sl.at.clone();
+  at.y += dy * CM;
   // Étiquette : on vise de l'intérieur du col vers le dos. Sinon : de l'extérieur vers le point.
   const origin = sl.inside ? at.clone() : at.clone().addScaledVector(sl.from, 3);
   const dir = sl.inside ? back.clone() : sl.from.clone().negate();
   ray.set(origin, dir);
   const hit = ray.intersectObjects(sl.mesh ? [sl.mesh] : parts)[0];
-  if (!hit) return toast('Emplacement introuvable, essaie une autre hauteur.');
+  if (!hit) return null;
   // orientation = normale moyenne du tissu autour du point (5 rayons écartés de 2 cm) : le visuel épouse la surface sans suivre chaque pli
   const targets = sl.mesh ? [sl.mesh] : parts, side = V(0, 1, 0).cross(dir).normalize(), up = dir.clone().cross(side).normalize(), n = V();
   for (const [a, b] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]){
@@ -290,20 +321,40 @@ function place(){
     const fn = h.face.normal.clone().transformDirection(h.object.matrixWorld); n.add(fn.dot(dir) > 0 ? fn.negate() : fn);
   }
   if (n.lengthSq() < 1e-6) n.copy(dir).negate();
-  helper.position.copy(hit.point); helper.lookAt(hit.point.clone().add(n.normalize()));   // le design regarde vers l'extérieur du tissu
-  helper.rotateZ(-$('#rot').value * Math.PI / 180);
-  const w = +$('#size').value * CM;
-  const geo = new DecalGeometry(hit.object, hit.point, helper.rotation, new THREE.Vector3(w, w / S.aspect, sl.depth ?? .22));
-  // l'encre prend le grain de la maille (même carreau de 1,5 cm que le tissu)
-  S.decal = new THREE.Mesh(geo, new THREE.MeshPhysicalMaterial({ map: S.tex, transparent: true, roughness: .8, sheen: .2, normalMap: knit(w / (1.5*CM), w / S.aspect / (1.5*CM)), normalScale: new THREE.Vector2(.5, .5), depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, side: THREE.DoubleSide }));
-  S.decal.receiveShadow = true; scene.add(S.decal);
+  return { hit, n: n.normalize() };
 }
+
+// ============ Les « + » posés sur chaque zone (cachés en mode aperçu) ============
+const pins = Object.keys(SLOTS).map(k => {
+  const b = Object.assign(document.createElement('button'), { type: 'button', className: 'pin', textContent: '+', hidden: true });
+  b.dataset.k = k; b.title = b.ariaLabel = SLOTS[k].name;
+  b.onclick = () => { select(k); D[k] || $('#file').click(); };   // zone vide : on choisit tout de suite un design
+  viewer.append(b); return b;
+});
+function pinAnchors(){ for (const k in SLOTS){ const a = aim(k, 0); if (a) Object.assign(SLOTS[k], { pt: a.hit.point.clone(), n: a.n }); } }
+const pv = V(), toCam = V();
+function movePins(){
+  const off = $('#preview').getAttribute('aria-pressed') === 'true', w = viewer.clientWidth, h = viewer.clientHeight;
+  for (const b of pins){
+    const sl = SLOTS[b.dataset.k];
+    // caché si la zone est de l'autre côté du t-shirt (la normale du tissu tourne le dos à la caméra)
+    const seen = sl.pt && toCam.copy(camera.position).sub(sl.pt).dot(sl.n) > 0;
+    b.hidden = off || !seen; if (b.hidden) continue;
+    pv.copy(sl.pt).project(camera);
+    b.style.transform = `translate(${(pv.x * .5 + .5) * w}px, ${(-pv.y * .5 + .5) * h}px) translate(-50%, -50%)`;
+    b.classList.toggle('on', b.dataset.k === S.slot);
+  }
+}
+$('#preview').onclick = e => { const b = e.currentTarget; b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true'); };
 function outputs(){
   $('output[for=size]').textContent = (+$('#size').value).toLocaleString('fr-FR') + ' cm';
   $('output[for=rot]').textContent = $('#rot').value + '°';
   $('output[for=dy]').textContent = (+$('#dy').value).toLocaleString('fr-FR') + ' cm';
 }
-['size', 'rot', 'dy'].forEach(id => $('#' + id).oninput = place);
+['size', 'rot', 'dy'].forEach(id => $('#' + id).oninput = () => {
+  outputs(); const d = D[S.slot]; if (!d) return;
+  d[id] = +$('#' + id).value; place();
+});
 
 // ============ Caméra ============
 function look(k, now){
@@ -328,33 +379,57 @@ renderer.setAnimationLoop(() => {
     camera.position.setFromSpherical(a).add(t);
     if (camera.position.distanceTo(S.goal) < .01) S.goal = null;
   }
-  controls.update(); renderer.render(scene, camera);
+  controls.update(); renderer.render(scene, camera); movePins();
 });
 
 // ============ Import du design ============
 $('#drop').onclick = $('#change').onclick = () => $('#file').click();
 $('#drop').onkeydown = e => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), $('#file').click());
-$('#file').onchange = e => e.target.files[0] && loadFile(e.target.files[0]);
+$('#file').onchange = e => { loadFiles([...e.target.files]); e.target.value = ''; };
 ['dragover','dragenter'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); $('#drop').classList.add('over'); }));
 ['dragleave','drop'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); $('#drop').classList.remove('over'); }));
-document.addEventListener('drop', e => e.dataTransfer.files[0] && loadFile(e.dataTransfer.files[0]));
+document.addEventListener('drop', e => loadFiles([...e.dataTransfer.files]));
+$('#remove').onclick = () => {
+  const d = D[S.slot]; if (!d) return;
+  d.decal && (scene.remove(d.decal), d.decal.geometry.dispose(), d.decal.material.dispose());
+  d.tex.dispose(); delete D[S.slot]; select(S.slot);
+};
 
-async function loadFile(f){
-  if (!/^image\/(png|jpeg|webp)$/.test(f.type)) return toast('Choisis une image PNG, JPG ou WebP.');
-  let img;
-  try { img = await createImageBitmap(f, { imageOrientation: 'flipY' }); }
-  catch { return toast('Impossible de lire cette image.'); }
-  S.tex?.dispose();
-  S.tex = new THREE.Texture(img); S.tex.flipY = false;   // déjà retournée par createImageBitmap
-  S.tex.colorSpace = THREE.SRGBColorSpace; S.tex.anisotropy = 8; S.tex.needsUpdate = true;
-  S.aspect = img.width / img.height;
-  const th = $('#thumb'), c = th.getContext('2d'), k = Math.min(th.width / img.width, th.height / img.height);
+// Le 1er design va sur l'emplacement choisi, les suivants sur les emplacements encore libres
+async function loadFiles(files){
+  if (!files.length) return;
+  const keys = Object.keys(SLOTS), start = keys.indexOf(S.slot);
+  const order = [S.slot, ...keys.slice(start + 1), ...keys.slice(0, start)].filter((k, i) => !i || !D[k]);
+  const placed = [];
+  for (const f of files){
+    if (!order.length){ toast('Plus d’emplacement libre : retire un design pour en ajouter un autre.'); break; }
+    if (!/^image\/(png|jpeg|webp)$/.test(f.type)){ toast('Choisis une image PNG, JPG ou WebP.'); continue; }
+    let img;
+    try { img = await createImageBitmap(f, { imageOrientation: 'flipY' }); }
+    catch { toast('Impossible de lire « ' + f.name + ' ».'); continue; }
+    const k = order.shift(), old = D[k];
+    if (old){ old.decal && (scene.remove(old.decal), old.decal.geometry.dispose()); old.tex.dispose(); }
+    const tex = new THREE.Texture(img); tex.flipY = false;   // déjà retournée par createImageBitmap
+    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8; tex.needsUpdate = true;
+    D[k] = { tex, img, aspect: img.width / img.height, name: f.name, size: old?.size ?? SLOTS[k].cm, rot: old?.rot ?? 0, dy: old?.dy ?? 0,
+      info: `${img.width} × ${img.height} px` + (f.type === 'image/jpeg' ? ' · JPG : le fond blanc reste visible' : '') };
+    place(k); placed.push(SLOTS[k].name);
+  }
+  if (placed.length > 1) toast('Designs posés : ' + placed.join(', ') + '.');
+  select(S.slot);
+}
+
+// Affiche le design de l'emplacement choisi (ou la zone de dépôt s'il n'y en a pas)
+function showFile(){
+  const d = D[S.slot];
+  document.querySelectorAll('#slots button').forEach(x => x.classList.toggle('has', !!D[x.dataset.k]));
+  $('#drop').classList.toggle('hide', !!d); $('#fileInfo').classList.toggle('hide', !d);
+  if (!d) return;
+  const th = $('#thumb'), c = th.getContext('2d'), img = d.img, k = Math.min(th.width / img.width, th.height / img.height);
   c.clearRect(0, 0, th.width, th.height);
   c.save(); c.translate(0, th.height); c.scale(1, -1);   // l'aperçu remis à l'endroit
   c.drawImage(img, (th.width - img.width*k) / 2, (th.height - img.height*k) / 2, img.width*k, img.height*k); c.restore();
-  $('#fname').textContent = f.name; $('#fpx').textContent = `${img.width} × ${img.height} px` + (f.type === 'image/jpeg' ? ' · JPG : le fond blanc reste visible' : '');
-  $('#drop').classList.add('hide'); $('#fileInfo').classList.remove('hide');
-  place();
+  $('#fname').textContent = d.name; $('#fpx').textContent = d.info;
 }
 
 // ============ Couleur du t-shirt ============
